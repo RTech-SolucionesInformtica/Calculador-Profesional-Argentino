@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#050811">
   <title>Calculador de Cableado Residencial AEA - Esc. José Martí</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -52,15 +53,15 @@
     </div>
     <div class="form-group">
       <label for="potenciaTotal">Potencia Total Contratada (kW)</label>
-      <input type="number" id="potenciaTotal" step="0.1" placeholder="Ej: 5.5">
+      <input type="number" id="potenciaTotal" step="0.1" inputmode="decimal" placeholder="Ej: 5.5">
     </div>
     <div class="form-group">
       <label for="factorPotencia">Factor de Potencia (cos φ)</label>
-      <input type="number" id="factorPotencia" step="0.01" value="0.95">
+      <input type="number" id="factorPotencia" step="0.01" inputmode="decimal" value="0.95">
     </div>
     <div class="form-group">
       <label for="longitudPrincipal">Longitud de acometida principal (m)</label>
-      <input type="number" id="longitudPrincipal" value="20">
+      <input type="number" id="longitudPrincipal" inputmode="numeric" value="20">
     </div>
     <button id="btnConfigurar" class="btn btn-primary btn-large">✓ Configurar Sistema</button>
     
@@ -95,11 +96,11 @@
       </div>
       <div class="form-group">
         <label for="potenciaCircuito">Potencia (kW)</label>
-        <input type="number" id="potenciaCircuito" step="0.01" placeholder="Ej: 1.5">
+        <input type="number" id="potenciaCircuito" step="0.01" inputmode="decimal" placeholder="Ej: 1.5">
       </div>
       <div class="form-group">
         <label for="longitud">Longitud del circuito (m)</label>
-        <input type="number" id="longitud" placeholder="Ej: 15">
+        <input type="number" id="longitud" inputmode="numeric" placeholder="Ej: 15">
       </div>
       <div class="form-group">
         <label for="caida">Caída de tensión máxima permitida (%)</label>
@@ -156,7 +157,7 @@
 <footer class="footer">
   <div class="footer-content">
     <small>© 2026 R-TECH | Calculador AEA | Autor: Juan Pablo Rodríguez</small>
-    <a href="https://wa.me/5491100000000" class="whatsapp-btn" target="_blank">
+    <a href="https://wa.me/543813399196" class="whatsapp-btn" target="_blank">
       <svg viewBox="0 0 24 24" fill="currentColor">
         <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.135-1.347a9.946 9.946 0 004.877 1.267c5.507 0 9.991-4.477 9.992-9.986 0-2.67-1.037-5.178-2.923-7.062A9.925 9.925 0 0012.012 2zm5.726 14.129c-.314.882-1.542 1.616-2.11 1.674-.528.055-1.21.085-1.936-.145a10.66 10.66 0 01-4.259-2.52 11.608 11.608 0 01-2.946-4.009c-.36-.615-.572-1.332-.232-1.921.168-.291.528-.616.791-.832.083-.068.163-.122.222-.162.213-.146.402-.191.554-.045.152.145.548 1.344.593 1.439.046.094.046.204-.015.326-.061.122-.122.193-.213.297-.091.102-.192.176-.08.371.391.683.87 1.25 1.474 1.776.776.678 1.54 1.11 2.22 1.385.193.078.366.046.488-.088.152-.166.578-.671.73-.901.122-.18.274-.147.456-.076.183.071 1.411.666 1.654.787.244.12.406.18.467.284.061.105.061.616-.253 1.498z"/>
       </svg>

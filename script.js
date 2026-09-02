@@ -118,14 +118,26 @@ function validarCaida(porcentajeCaida, maxPermitido) {
 }
 
 function guardarProyecto() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(proyectoActual));
+  // En algunos navegadores (ej. Safari con Navegación Privada, o modos
+  // restringidos en Android) localStorage puede no estar disponible y
+  // tirar una excepción. Sin este try/catch, toda la app dejaba de
+  // responder al configurar el sistema o agregar un circuito.
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(proyectoActual));
+  } catch (err) {
+    console.warn('No se pudo guardar el proyecto (almacenamiento no disponible):', err);
+  }
 }
 
 function cargarProyecto() {
-  const data = localStorage.getItem(STORAGE_KEY);
-  if (data) {
-    proyectoActual = JSON.parse(data);
-    return true;
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (data) {
+      proyectoActual = JSON.parse(data);
+      return true;
+    }
+  } catch (err) {
+    console.warn('No se pudo cargar el proyecto guardado:', err);
   }
   return false;
 }
@@ -292,7 +304,11 @@ function exportarPDF() { window.print(); }
 function limpiarTodo() {
   if (confirm('¿Eliminar todo el proyecto? Esta acción no se puede deshacer.')) {
     proyectoActual = { tipoSistema: '', potenciaTotal: 0, factorPotencia: 0.95, longitudPrincipal: 20, circuitos: [] };
-    localStorage.removeItem(STORAGE_KEY);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      console.warn('No se pudo limpiar el almacenamiento:', err);
+    }
     location.reload();
   }
 }
