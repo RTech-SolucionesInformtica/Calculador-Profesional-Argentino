@@ -1,4 +1,3 @@
-/* Estilos Generales y Tema Oscuro Industrial / Eléctrico */
 :root {
   --bg-dark: #0f141c;
   --panel-bg: #18202c;
@@ -19,18 +18,18 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-body {
+html, body {
   background-color: var(--bg-dark);
   color: var(--text-main);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
-/* Header */
 .site-header {
   background: linear-gradient(135deg, #131b26 0%, #1c2636 100%);
   border-bottom: 2px solid var(--accent-yellow);
@@ -47,16 +46,20 @@ body {
 }
 
 .logo svg {
-  width: 38px;
-  height: 38px;
-  filter: drop-shadow(0 0 8px rgba(255, 234, 0, 0.5));
+  width: 55px;
+  height: 55px;
+  filter: drop-shadow(0 0 8px rgba(255, 234, 0, 0.6));
+  transition: transform 0.3s ease;
+}
+
+.logo:hover svg {
+  transform: scale(1.08) rotate(-3deg);
 }
 
 .title-block h1 {
   font-size: 1.4rem;
   font-weight: 700;
   color: #fff;
-  letter-spacing: 0.5px;
 }
 
 .title-block .subtitle {
@@ -65,7 +68,6 @@ body {
   font-weight: 500;
 }
 
-/* Main Layout */
 .app {
   max-width: 1300px;
   width: 100%;
@@ -77,7 +79,6 @@ body {
   flex: 1;
 }
 
-/* Panels */
 .panel {
   background-color: var(--panel-bg);
   border: 1px solid var(--panel-border);
@@ -93,14 +94,10 @@ body {
   font-size: 1.15rem;
   font-weight: 600;
   color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   border-bottom: 1px solid var(--panel-border);
   padding-bottom: 0.75rem;
 }
 
-/* Form Elements */
 .form-group {
   display: flex;
   flex-direction: column;
@@ -110,7 +107,6 @@ body {
 label {
   font-size: 0.85rem;
   color: var(--text-muted);
-  font-weight: 500;
 }
 
 input, select {
@@ -126,10 +122,8 @@ input, select {
 input:focus, select:focus {
   outline: none;
   border-color: var(--accent-yellow);
-  box-shadow: 0 0 0 3px rgba(255, 234, 0, 0.15);
 }
 
-/* Buttons */
 .btn {
   background-color: #212d3f;
   color: #fff;
@@ -140,15 +134,6 @@ input:focus, select:focus {
   border-radius: 8px;
   cursor: pointer;
   transition: var(--transition);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-}
-
-.btn:hover {
-  background-color: #2c3a52;
-  border-color: #3b4e6d;
 }
 
 .btn-primary {
@@ -157,29 +142,17 @@ input:focus, select:focus {
   border-color: var(--accent-yellow);
 }
 
-.btn-primary:hover {
-  background-color: var(--accent-yellow-hover);
-  border-color: var(--accent-yellow-hover);
-}
-
 .btn-delete {
   background-color: rgba(239, 68, 68, 0.15);
   color: var(--danger);
   border-color: rgba(239, 68, 68, 0.3);
 }
 
-.btn-delete:hover {
-  background-color: var(--danger);
-  color: #fff;
-}
-
-/* Summary Box */
 .summary-box {
   background-color: #121923;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 1rem;
-  margin-top: auto;
 }
 
 .summary-box h3 {
@@ -194,109 +167,32 @@ input:focus, select:focus {
   gap: 0.5rem;
 }
 
-.stat .label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
+.stat .label { font-size: 0.75rem; color: var(--text-muted); }
+.stat .value { font-size: 1.1rem; font-weight: 700; color: #fff; }
 
-.stat .value {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #fff;
-}
-
-/* Table */
 #tableWrap {
   overflow-x: auto;
   max-height: 280px;
-  overflow-y: auto;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
 }
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-  text-align: left;
-}
+table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+th { background-color: #121923; color: var(--accent-yellow); padding: 0.6rem 0.7rem; position: sticky; top: 0; }
+td { padding: 0.6rem 0.7rem; border-top: 1px solid var(--panel-border); }
+.valido { color: #10b981; font-weight: bold; }
+.invalido { color: var(--danger); font-weight: bold; }
+.empty-state { text-align: center; color: var(--text-muted); padding: 2rem; font-style: italic; }
+.actions-export { display: flex; gap: 0.75rem; }
 
-th {
-  background-color: #121923;
-  color: var(--accent-yellow);
-  padding: 0.6rem 0.7rem;
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
+.footer { background-color: #131b26; border-top: 1px solid var(--panel-border); padding: 1rem 2rem; }
+.footer-content { max-width: 1300px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 0.85rem; }
+.whatsapp-btn { display: inline-flex; align-items: center; gap: 0.4rem; background-color: #25d366; color: #fff; padding: 0.4rem 0.8rem; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 0.8rem; }
+.whatsapp-btn svg { width: 16px; height: 16px; }
 
-td {
-  padding: 0.6rem 0.7rem;
-  border-top: 1px solid var(--panel-border);
+.spark {
+  position: fixed; pointer-events: none; z-index: 9999; background: var(--accent-yellow); border-radius: 2px;
+  filter: drop-shadow(0 0 6px var(--accent-yellow)); animation: sparkFade 0.4s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
 }
-
-tr:hover td {
-  background-color: rgba(255, 255, 255, 0.02);
-}
-
-.empty-state {
-  text-align: center;
-  color: var(--text-muted);
-  padding: 2rem !important;
-  font-style: italic;
-}
-
-.actions-export {
-  display: flex;
-  gap: 0.75rem;
-}
-
-/* Footer */
-.footer {
-  background-color: #131b26;
-  border-top: 1px solid var(--panel-border);
-  padding: 1rem 2rem;
-  margin-top: auto;
-}
-
-.footer-content {
-  max-width: 1300px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.whatsapp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  background-color: #25d366;
-  color: #fff;
-  padding: 0.4rem 0.8rem;
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 0.8rem;
-  transition: var(--transition);
-}
-
-.whatsapp-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.whatsapp-btn:hover {
-  background-color: #22bf5b;
-}
-
-@media (max-width: 768px) {
-  .footer-content {
-    flex-direction: column;
-    gap: 0.75rem;
-    text-align: center;
-  }
-}
+@keyframes sparkFade { 0% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--rot, 0deg)) translate(var(--tx, 0px), var(--ty, 0px)) scaleX(0.3); } }
+@media (max-width: 768px) { .footer-content { flex-direction: column; gap: 0.75rem; text-align: center; } }
