@@ -1,2 +1,2 @@
-# Calculador-Profesional-Argentino
-Calculador Profesional Argentino
+# Calculador-Profesional.ARG
+CALCULADOR PROFESIONAL 
