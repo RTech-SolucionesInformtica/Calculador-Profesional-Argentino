@@ -4,29 +4,42 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Calculador de Cableado Residencial AEA - Esc. José Martí</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header class="site-header">
     <div class="header-inner">
       <div class="logo">
-        <!-- LOGOTIPO COMPLETO: MULTÍMETRO DIGITAL CON CABLES Y PUNTAS DE PRUEBA -->
-        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="12" y="15" width="38" height="62" rx="5" fill="#131b26" stroke="currentColor" stroke-width="3"/>
-          <rect x="18" y="21" width="26" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
-          <path d="M22 27h4m2 0h4M24 24v6m6-6v6" stroke="currentColor" stroke-width="1.5" opacity="0.8"/>
-          <circle cx="31" cy="51" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
-          <line x1="31" y1="51" x2="31" y2="44" stroke="currentColor" stroke-width="2.5"/>
-          <circle cx="21" cy="67" r="1.5" fill="currentColor"/>
-          <circle cx="31" cy="67" r="1.5" fill="currentColor"/>
-          <circle cx="41" cy="67" r="1.5" fill="currentColor"/>
-          <path d="M31 69c0,11 12,17 22,12c5,-2 7,-8 7,-13" stroke="currentColor" stroke-width="2" fill="none"/>
-          <rect x="57" y="45" width="6" height="20" rx="1" fill="#131b26" stroke="currentColor" stroke-width="2"/>
-          <line x1="60" y1="45" x2="60" y2="35" stroke="currentColor" stroke-width="1.5"/>
-          <path d="M41 69c0,16 22,20 31,10c5,-7 5,-16 5,-22" stroke="currentColor" stroke-width="2" fill="none"/>
-          <rect x="74" y="35" width="6" height="20" rx="1" fill="#131b26" stroke="currentColor" stroke-width="2"/>
-          <line x1="77" y1="35" x2="77" y2="25" stroke="currentColor" stroke-width="1.5"/>
+        <!-- Logotipo en SVG Nativo de Multímetro con cables neón -->
+        <svg viewBox="0 0 100 100" xmlns="http://w3.org">
+          <defs>
+            <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="2" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+          <!-- Carcasa exterior amarilla -->
+          <rect x="25" y="10" width="50" height="70" rx="6" fill="#FFEA00" stroke="#0f141c" stroke-width="2" />
+          <!-- Frontal oscuro -->
+          <rect x="29" y="14" width="42" height="62" rx="4" fill="#18202c" />
+          <!-- Pantalla con brillo neón -->
+          <rect x="34" y="20" width="32" height="14" rx="2" fill="#0d1219" stroke="#FFEA00" stroke-width="1" filter="url(#neon-glow)" />
+          <text x="50" y="31" font-family="monospace" font-size="9" font-weight="bold" fill="#FFEA00" text-anchor="middle" letter-spacing="1">220.0V</text>
+          <!-- Perilla central -->
+          <circle cx="50" cy="50" r="9" fill="#0d1219" stroke="#9ca3af" stroke-width="1.5" />
+          <line x1="50" y1="50" x2="50" y2="42" stroke="#FFEA00" stroke-width="2" stroke-linecap="round" />
+          <!-- Bornes de entrada -->
+          <circle cx="44" cy="68" r="2.5" fill="#0d1219" stroke="#9ca3af" stroke-width="1" />
+          <circle cx="56" cy="68" r="2.5" fill="#0d1219" stroke="#ef4444" stroke-width="1" />
+          <!-- Cable Negro COM -->
+          <path d="M 44 70 C 44 85, 15 75, 15 90" fill="none" stroke="#263347" stroke-width="2.5" stroke-linecap="round" />
+          <path d="M 15 90 L 15 85" stroke="#0d1219" stroke-width="3" stroke-linecap="round" />
+          <line x1="15" y1="85" x2="15" y2="78" stroke="#9ca3af" stroke-width="1" />
+          <!-- Cable Rojo Volts -->
+          <path d="M 56 70 C 56 90, 85 75, 85 90" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" filter="url(#neon-glow)" />
+          <path d="M 85 90 L 85 85" stroke="#dc2626" stroke-width="3" stroke-linecap="round" />
+          <line x1="85" y1="85" x2="85" y2="78" stroke="#9ca3af" stroke-width="1" />
         </svg>
       </div>
       <div class="title-block">
@@ -37,6 +50,7 @@
   </header>
 
   <main class="app">
+    <!-- PANEL 1: Configuración del Sistema Eléctrico -->
     <section class="panel">
       <h2>⚡ Configuración del Sistema</h2>
       <div class="form-group">
@@ -50,11 +64,11 @@
       </div>
       <div class="form-group">
         <label for="potenciaTotal">Potencia Total Contratada (kW)</label>
-        <input type="number" id="potenciaTotal" step="0.1" placeholder="Ej: 5.5">
+        <input type="number" id="potenciaTotal" step="0.1" placeholder="Ej. 5.5">
       </div>
       <div class="form-group">
         <label for="factorPotencia">Factor de Potencia (cos φ)</label>
-        <input type="number" id="factorPotencia" value="0.95" step="0.01">
+        <input type="number" id="factorPotencia" step="0.01" value="0.95">
       </div>
       <div class="form-group">
         <label for="longitudPrincipal">Longitud de acometida principal (m)</label>
@@ -62,12 +76,13 @@
       </div>
       <button id="btnConfigurar" class="btn btn-primary">✓ Configurar Sistema</button>
 
-      <div id="panelTablero" class="summary-box" style="display: none;">
+      <div id="panelTablero" style="display: none;" class="summary-box">
         <h3>📊 Tablero Principal</h3>
         <div id="resumenTablero"></div>
       </div>
     </section>
 
+    <!-- PANEL 2: Formulario de Circuitos -->
     <section class="panel">
       <h2>⚙ Agregar Circuitos</h2>
       <form id="circuitForm" onsubmit="return false;">
@@ -87,32 +102,33 @@
         </div>
         <div class="form-group">
           <label for="ambiente">Ambiente/Descripción</label>
-          <input type="text" id="ambiente" placeholder="Ej: Cocina, Dormitorio">
+          <input type="text" id="ambiente" placeholder="Ej. Dormitorio Principal">
         </div>
         <div class="form-group">
           <label for="potenciaCircuito">Potencia (kW)</label>
-          <input type="number" id="potenciaCircuito" step="0.01" placeholder="Ej: 1.5">
+          <input type="number" id="potenciaCircuito" step="0.01" placeholder="Ej. 1.5">
         </div>
         <div class="form-group">
           <label for="longitud">Longitud del circuito (m)</label>
-          <input type="number" id="longitud" placeholder="Ej: 15">
+          <input type="number" id="longitud" placeholder="Ej. 15">
         </div>
         <div class="form-group">
           <label for="caida">Caída de tensión máxima permitida (%)</label>
           <select id="caida">
-            <option value="3">3% (Ramales)</option>
-            <option value="5" selected>5% (Circuitos)</option>
-            <option value="8">8% (Total)</option>
+            <option value="3">3% (Ramales Terminales)</option>
+            <option value="5">5% (Circuitos Motores)</option>
+            <option value="8">8% (Total Máximo)</option>
           </select>
         </div>
-        <div class="actions-export" style="margin-top: 1rem;">
-          <button type="submit" class="btn btn-primary">+ Agregar</button>
+        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+          <button type="submit" class="btn btn-primary" style="flex: 1;">+ Agregar</button>
           <button type="button" id="btnLimpiarForm" class="btn">Limpiar</button>
         </div>
       </form>
     </section>
 
-    <section class="panel">
+    <!-- PANEL 3: Resumen y Reporte Técnico -->
+    <section class="panel" style="grid-column: 1 / -1;">
       <h2>📊 Resumen de Circuitos</h2>
       <div id="tableWrap">
         <table id="circuitsTable">
@@ -130,17 +146,15 @@
           </thead>
           <tbody></tbody>
         </table>
-        <div id="emptyState" class="empty-state">
-          No hay circuitos agregados. Agrega circuitos para ver el resumen.
-        </div>
+        <div id="emptyState" class="empty-state">No hay circuitos agregados. Agrega circuitos para ver el resumen.</div>
       </div>
 
       <div id="resumenCircuitos" class="summary-box">
-        <p style="text-align:center;opacity:0.7">Agrega circuitos para ver el resumen</p>
+        <p style="text-align:center; opacity:0.7">Agrega circuitos para ver el resumen</p>
       </div>
 
       <div class="actions-export">
-        <button id="btnExport" class="btn">📄 Exportar Proyecto PDF</button>
+        <button id="btnExport" class="btn btn-primary">📄 Exportar Proyecto PDF</button>
         <button id="btnLimpiarTodo" class="btn btn-delete">🗑 Limpiar Todo</button>
       </div>
     </section>
@@ -148,19 +162,18 @@
 
   <footer class="footer">
     <div class="footer-content">
-      <small>© 2026 R-TECH | Calculador AEA | Autor: Juan Pablo Rodríguez</small>
+      <span>© 2026 R-TECH | Calculador AEA | Autor: Juan Pablo Rodríguez</span>
       <a href="https://wa.me" class="whatsapp-btn" target="_blank">
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12.012 2c-5.508 0-9.986 4.478-9.986 9.986 0 1.758.459 3.473 1.332 4.992L2 22l5.131-1.346a9.927 9.927 0 004.876 1.278h.005c5.507 0 9.986-4.479 9.986-9.987C21.998 6.478 17.52 2 12.012 2zm6.015 14.168c-.263.743-1.527 1.349-2.126 1.421-.575.069-1.326.113-3.69-.863-3.023-1.248-4.949-4.32-5.1-4.521-.151-.202-1.206-1.603-1.206-3.059 0-1.455.763-2.17.1035-2.464-.262-.294-.575-.367-.763-.367-.188 0-.413.069-.626.294-.213.22-.813.793-.813 1.933 0 1.139.826 2.24 1.939 3.729 1.114 1.489 2.428 2.662 3.69 3.204.34.146.678.238.924.316.353.111.674.096.927.058.283-.042.873-.357 1.096-.999.223-.642.223-1.192.156-1.307-.066-.115-.245-.183-.513-.317-.267-.134-1.583-.781-1.829-.871-.247-.089-.427-.134-.606.134-.18.267-.693.871-.85 1.05-.157.178-.314.201-.582.067-.268-.134-1.13-.417-2.153-1.331-.796-.71-1.333-1.586-1.49-1.854-.157-.267-.017-.412.117-.545.121-.12.268-.313.402-.469.134-.156.179-.268.268-.446.089-.178.045-.335-.022-.469-.067-.134-.606-1.46-.83-2.001-.219-.527-.441-.454-.606-.462-.153-.008-.33-.009-.508-.009z"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.713-1.457L0 24zm6.59-4.846c1.6.95 3.488 1.451 5.42 1.453 5.414 0 9.818-4.394 9.822-9.805.002-2.622-1.012-5.086-2.855-6.931-1.844-1.843-4.298-2.856-6.921-2.857-5.416 0-9.821 4.4-9.825 9.809-.001 1.91.498 3.779 1.447 5.403L2.672 21.3l4.31t1.157-1.147z"/></svg>
         WhatsApp
       </a>
     </div>
   </footer>
 
-  <script src="script.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
+
 
   </footer>
 
