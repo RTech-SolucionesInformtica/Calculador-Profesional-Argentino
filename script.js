@@ -377,10 +377,16 @@ class ElectricMouse {
     this.mouseY = 0;
     this.lastSparkTime = 0;
     this.sparkInterval = 40; // ms entre ráfagas
+    // Respeta la preferencia de accesibilidad "reducir movimiento" y de
+    // paso alivia el rendimiento en celulares de gama baja, donde generar
+    // chispas en cada movimiento/click puede sentirse lento o trabado.
+    this.motionReducido = window.matchMedia &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.init();
   }
 
   init() {
+    if (this.motionReducido) return;
     document.addEventListener('mousemove', (e) => this.onMouseMove(e));
     document.addEventListener('click', (e) => this.onMouseClick(e));
   }
@@ -399,6 +405,7 @@ class ElectricMouse {
   }
 
   onMouseClick(e) {
+    if (this.motionReducido) return;
     const cantidadChispas = 10;
     for (let i = 0; i < cantidadChispas; i++) {
       this.crearChispaRayo(e.clientX, e.clientY);
@@ -446,7 +453,17 @@ function crearExplosionEnClick(x, y) {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      initApp();
+    } catch (err) {
+      console.error('Error al iniciar la app:', err);
+    }
+  });
 } else {
-  initApp();
+  try {
+    initApp();
+  } catch (err) {
+    console.error('Error al iniciar la app:', err);
+  }
 }

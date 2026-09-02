@@ -31,6 +31,19 @@ html, body {
   overflow-x: hidden;
 }
 
+/* Fallback para navegadores que NO soportan backdrop-filter
+   (Android viejo, Firefox antiguo, navegadores embebidos, etc.):
+   usamos un fondo sólido en vez de transparente para que el texto
+   siga siendo legible sin el efecto de vidrio esmerilado. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header {
+    background: rgb(8, 12, 24);
+  }
+  .panel {
+    background: rgb(15, 22, 40);
+  }
+}
+
 /* ============================================
    HEADER RESPONSIVO CON SUBTÍTULO
    ============================================ */
@@ -107,6 +120,15 @@ html, body {
   padding: 0 24px;
   min-height: calc(100vh - 200px); /* fallback para navegadores sin soporte de dvh */
   min-height: calc(100dvh - 200px); /* se ajusta a la barra de direcciones en móviles */
+}
+
+/* Fallback para navegadores muy antiguos sin soporte de CSS Grid:
+   apilamos los paneles con Flexbox en vez de romper el layout. */
+@supports not (display: grid) {
+  .app {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -443,6 +465,22 @@ td {
     width: 100%;
     justify-content: center;
     padding: 12px 16px; /* Botón más grande para pulsar en móvil */
+  }
+}
+
+/* ============================================
+   ACCESIBILIDAD / GAMA BAJA: RESPETAR REDUCCIÓN DE MOVIMIENTO
+   Sirve tanto para usuarios que activaron esta opción de accesibilidad
+   como para aliviar el rendimiento en celulares de gama baja.
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .spark {
+    display: none;
   }
 }
 
