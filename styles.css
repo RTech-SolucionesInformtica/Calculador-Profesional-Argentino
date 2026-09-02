@@ -36,7 +36,6 @@ body {
     border: 1px solid rgba(255, 234, 0, 0.15);
     border-radius: 14px;
     padding: 24px;
-    height: 100%;
 }
 .card-title-custom {
     color: #FFEA00;
@@ -91,10 +90,12 @@ label {
 .table-custom th {
     color: #FFEA00;
     border-bottom: 2px solid rgba(255, 234, 0, 0.15);
+    white-space: nowrap;
 }
 .table-custom td {
     border-bottom: 1px dashed rgba(255, 234, 0, 0.1);
     vertical-align: middle;
+    white-space: nowrap;
 }
 .opcion-test {
     background-color: #050811;
@@ -132,4 +133,12 @@ label {
     background: rgba(37, 211, 102, 0.1);
     border-color: #25d366;
     color: #25d366;
+}
+.pdf-printing .no-export {
+    display: none !important;
+}
+.pdf-printing .card-custom {
+    background-color: #0d1426 !important;
+    color: #ffffff !important;
+    border: 1px solid #FFEA00 !important;
 }
