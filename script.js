@@ -11,11 +11,14 @@ const TENSIONES = {
   trifasico: 380 // Voltaje de línea real para sistemas 3φ (Fase-Fase)
 };
 
+// CORREGIDO: los disyuntores ahora usan la serie normalizada IEC 60898
+// (10-16-20-25-32-40-50-63-80-100-125-160-200A). Los valores 15A y 30A
+// del original no existen como térmicas comerciales.
 const CONDUCTORES_AEA = [
   { amperios: 10, mm2: 1.5, disyuntor: 10 },
-  { amperios: 15, mm2: 2.5, disyuntor: 15 },
+  { amperios: 16, mm2: 2.5, disyuntor: 16 },
   { amperios: 20, mm2: 2.5, disyuntor: 20 },
-  { amperios: 30, mm2: 4, disyuntor: 30 },
+  { amperios: 32, mm2: 4, disyuntor: 32 },
   { amperios: 40, mm2: 6, disyuntor: 40 },
   { amperios: 50, mm2: 10, disyuntor: 50 },
   { amperios: 63, mm2: 10, disyuntor: 63 },
@@ -25,6 +28,21 @@ const CONDUCTORES_AEA = [
   { amperios: 160, mm2: 50, disyuntor: 160 },
   { amperios: 200, mm2: 70, disyuntor: 200 }
 ];
+
+// NUEVO: secciones mínimas exigidas por la AEA 90364 según tipo de
+// circuito, independientemente de la corriente que dé el cálculo.
+// TUG (tomas de uso general): mín. 2.5mm²/20A.
+// TUE (circuitos especiales - cocina, lavarropas, calefacción, etc.): mín. 4mm²/25A.
+// Verificar siempre contra la tabla AEA vigente según el método de instalación real.
+const MINIMOS_AEA = {
+  'Iluminación': { mm2: 1.5, disyuntor: 10 },
+  'Tomacorriente': { mm2: 2.5, disyuntor: 20 },
+  'Cocina/Comedor': { mm2: 4, disyuntor: 25 },
+  'Lavarropas': { mm2: 4, disyuntor: 25 },
+  'Aire Acondicionado': { mm2: 4, disyuntor: 25 },
+  'Calefactor': { mm2: 4, disyuntor: 25 },
+  'Calentador de agua': { mm2: 4, disyuntor: 25 }
+};
 
 const RHO_COBRE = 0.0175;
 
@@ -62,6 +80,19 @@ function encontrarConductor(corriente) {
     }
   }
   return { mm2: '>70', disyuntor: '>200', amperios: Infinity };
+}
+
+// NUEVO: fuerza la sección/térmica mínima según el tipo de circuito
+// (AEA exige mínimos por tipo, sin importar cuán baja sea la potencia declarada).
+function aplicarMinimoAEA(tipoCircuito, conductorCalculado) {
+  const minimo = MINIMOS_AEA[tipoCircuito];
+  if (!minimo || conductorCalculado.mm2 === '>70') return conductorCalculado;
+
+  return {
+    mm2: Math.max(conductorCalculado.mm2, minimo.mm2),
+    disyuntor: Math.max(conductorCalculado.disyuntor, minimo.disyuntor),
+    amperios: Math.max(conductorCalculado.amperios, minimo.disyuntor)
+  };
 }
 
 function calcularCaidaTension(corriente, longitud, mm2, sistema) {
@@ -151,8 +182,18 @@ function agregarCircuito(event) {
     return;
   }
   
-  const corriente = calcularCorriente(potenciaCircuito, proyectoActual.tipoSistema, 0.95);
-  const conductor = encontrarConductor(corriente);
+  // CORREGIDO: usa el factor de potencia configurado por el usuario,
+  // antes quedaba fijo en 0.95 sin importar lo que se configurara.
+  const corriente = calcularCorriente(potenciaCircuito, proyectoActual.tipoSistema, proyectoActual.factorPotencia);
+  let conductor = encontrarConductor(corriente);
+
+  // CORREGIDO: aplica la sección/térmica mínima exigida por AEA según
+  // el tipo de circuito (tomas, cocina, lavarropas, etc.), aunque la
+  // corriente calculada hubiera alcanzado con un cable más chico.
+  conductor = aplicarMinimoAEA(tipoCircuito, conductor);
+
+  // La caída de tensión se recalcula con el conductor definitivo
+  // (puede haber cambiado de tamaño al aplicar el mínimo AEA).
   const caidaV = calcularCaidaTension(corriente, longitud, conductor.mm2, proyectoActual.tipoSistema);
   const caidaPorcentaje = calcularPorcentajeCaida(caidaV, proyectoActual.tipoSistema);
   
@@ -264,6 +305,13 @@ function configurarSistema() {
   
   if (!tipoSistema || !potenciaTotal) {
     alert('⚠️ Completa los datos obligatorios');
+    return;
+  }
+
+  // CORREGIDO: un factor de potencia 0, negativo o mayor a 1 rompía
+  // el cálculo (corriente infinita o negativa) sin ningún aviso.
+  if (!factorPotencia || factorPotencia <= 0 || factorPotencia > 1) {
+    alert('⚠️ El factor de potencia (cos φ) debe ser mayor a 0 y menor o igual a 1');
     return;
   }
   
