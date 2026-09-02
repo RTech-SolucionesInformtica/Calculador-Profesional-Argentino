@@ -7,9 +7,6 @@
   --text-main: #f3f4f6;
   --text-muted: #9ca3af;
   --danger: #ef4444;
-  --danger-hover: #dc2626;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
   --radius: 12px;
   --transition: all 0.25s ease;
 }
@@ -46,14 +43,9 @@ html, body {
 }
 
 .logo svg {
-  width: 55px;
-  height: 55px;
-  filter: drop-shadow(0 0 8px rgba(255, 234, 0, 0.6));
-  transition: transform 0.3s ease;
-}
-
-.logo:hover svg {
-  transform: scale(1.08) rotate(-3deg);
+  width: 42px;
+  height: 42px;
+  filter: drop-shadow(0 0 8px rgba(255, 234, 0, 0.5));
 }
 
 .title-block h1 {
@@ -68,6 +60,7 @@ html, body {
   font-weight: 500;
 }
 
+/* Grilla adaptable para todo tipo de pantallas */
 .app {
   max-width: 1300px;
   width: 100%;
@@ -142,6 +135,10 @@ input:focus, select:focus {
   border-color: var(--accent-yellow);
 }
 
+.btn-primary:hover {
+  background-color: var(--accent-yellow-hover);
+}
+
 .btn-delete {
   background-color: rgba(239, 68, 68, 0.15);
   color: var(--danger);
@@ -163,36 +160,54 @@ input:focus, select:focus {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
 }
 
+.stat { display: flex; flex-direction: column; gap: 0.2rem; }
 .stat .label { font-size: 0.75rem; color: var(--text-muted); }
 .stat .value { font-size: 1.1rem; font-weight: 700; color: #fff; }
 
+/* Contenedor responsivo con desplazamiento horizontal para celular */
 #tableWrap {
   overflow-x: auto;
-  max-height: 280px;
+  max-height: 350px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
 }
 
-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-th { background-color: #121923; color: var(--accent-yellow); padding: 0.6rem 0.7rem; position: sticky; top: 0; }
-td { padding: 0.6rem 0.7rem; border-top: 1px solid var(--panel-border); }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th { background-color: #121923; color: var(--accent-yellow); padding: 0.75rem; position: sticky; top: 0; text-align: left; }
+td { padding: 0.75rem; border-top: 1px solid var(--panel-border); }
 .valido { color: #10b981; font-weight: bold; }
 .invalido { color: var(--danger); font-weight: bold; }
 .empty-state { text-align: center; color: var(--text-muted); padding: 2rem; font-style: italic; }
-.actions-export { display: flex; gap: 0.75rem; }
+.actions-export { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
 
-.footer { background-color: #131b26; border-top: 1px solid var(--panel-border); padding: 1rem 2rem; }
+.footer { background-color: #131b26; border-top: 1px solid var(--panel-border); padding: 1rem 2rem; margin-top: auto; }
 .footer-content { max-width: 1300px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 0.85rem; }
 .whatsapp-btn { display: inline-flex; align-items: center; gap: 0.4rem; background-color: #25d366; color: #fff; padding: 0.4rem 0.8rem; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 0.8rem; }
 .whatsapp-btn svg { width: 16px; height: 16px; }
 
+/* Efecto de chispas en cursor */
 .spark {
   position: fixed; pointer-events: none; z-index: 9999; background: var(--accent-yellow); border-radius: 2px;
   filter: drop-shadow(0 0 6px var(--accent-yellow)); animation: sparkFade 0.4s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
 }
 @keyframes sparkFade { 0% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--rot, 0deg)) translate(var(--tx, 0px), var(--ty, 0px)) scaleX(0.3); } }
+
+/* Estilos limpios para la exportación a PDF */
+@media print {
+  body, html { background: #fff; color: #000; }
+  .site-header { border-bottom: 2px solid #000; background: #fff; color: #000; box-shadow: none; }
+  .title-block h1, .title-block .subtitle { color: #000; }
+  .panel { border: none; box-shadow: none; background: #fff; padding: 0; }
+  .panel h2, form, #btnConfigurar, .actions-export, .btn-delete, .footer, .spark { display: none !important; }
+  .app { display: flex; flex-direction: column; gap: 2rem; }
+  #panelTablero, #tableWrap, .summary-box { display: block !important; border: 1px solid #000; background: #fff; color: #000; }
+  th { background: #eee; color: #000; border-bottom: 2px solid #000; }
+  td { border-top: 1px solid #ccc; color: #000; }
+  .stat .value { color: #000; }
+}
+
 @media (max-width: 768px) { .footer-content { flex-direction: column; gap: 0.75rem; text-align: center; } }
