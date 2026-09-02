@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Calculador de Cableado Residencial AEA</title>
+  <title>Calculador de Cableado Residencial AEA - Esc. José Martí</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,8 +11,22 @@
   <header class="site-header">
     <div class="header-inner">
       <div class="logo">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#FFEA00" stroke-width="2">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- LOGOTIPO COMPLETO: MULTÍMETRO DIGITAL CON CABLES Y PUNTAS DE PRUEBA -->
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="12" y="15" width="38" height="62" rx="5" fill="#131b26" stroke="currentColor" stroke-width="3"/>
+          <rect x="18" y="21" width="26" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+          <path d="M22 27h4m2 0h4M24 24v6m6-6v6" stroke="currentColor" stroke-width="1.5" opacity="0.8"/>
+          <circle cx="31" cy="51" r="9" fill="none" stroke="currentColor" stroke-width="2"/>
+          <line x1="31" y1="51" x2="31" y2="44" stroke="currentColor" stroke-width="2.5"/>
+          <circle cx="21" cy="67" r="1.5" fill="currentColor"/>
+          <circle cx="31" cy="67" r="1.5" fill="currentColor"/>
+          <circle cx="41" cy="67" r="1.5" fill="currentColor"/>
+          <path d="M31 69c0,11 12,17 22,12c5,-2 7,-8 7,-13" stroke="currentColor" stroke-width="2" fill="none"/>
+          <rect x="57" y="45" width="6" height="20" rx="1" fill="#131b26" stroke="currentColor" stroke-width="2"/>
+          <line x1="60" y1="45" x2="60" y2="35" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M41 69c0,16 22,20 31,10c5,-7 5,-16 5,-22" stroke="currentColor" stroke-width="2" fill="none"/>
+          <rect x="74" y="35" width="6" height="20" rx="1" fill="#131b26" stroke="currentColor" stroke-width="2"/>
+          <line x1="77" y1="35" x2="77" y2="25" stroke="currentColor" stroke-width="1.5"/>
         </svg>
       </div>
       <div class="title-block">
@@ -23,91 +37,85 @@
   </header>
 
   <main class="app">
-    <!-- ⚡ Configuración del Sistema -->
-    <section class="panel config-panel">
+    <section class="panel">
       <h2>⚡ Configuración del Sistema</h2>
       <div class="form-group">
-        <label>Tipo de Sistema Eléctrico</label>
-        <select>
-          <option>-- Seleccionar --</option>
-          <option>Monofásico (1φ - 220V)</option>
-          <option>Bifásico (2φ - 2x220V)</option>
-          <option>Trifásico (3φ - 3x380V)</option>
+        <label for="tipoSistema">Tipo de Sistema Eléctrico</label>
+        <select id="tipoSistema">
+          <option value="">-- Seleccionar --</option>
+          <option value="monofasico">Monofásico (1φ - 220V)</option>
+          <option value="bifasico">Bifásico (2φ - 2x220V)</option>
+          <option value="trifasico">Trifásico (3φ - 3x380V)</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Potencia Total Contratada (kW)</label>
-        <input type="number" placeholder="Ej: 5.5">
+        <label for="potenciaTotal">Potencia Total Contratada (kW)</label>
+        <input type="number" id="potenciaTotal" step="0.1" placeholder="Ej: 5.5">
       </div>
       <div class="form-group">
-        <label>Factor de Potencia (cos φ)</label>
-        <input type="number" value="0.95" step="0.01">
+        <label for="factorPotencia">Factor de Potencia (cos φ)</label>
+        <input type="number" id="factorPotencia" value="0.95" step="0.01">
       </div>
       <div class="form-group">
-        <label>Longitud de acometida principal (m)</label>
-        <input type="number" value="20">
+        <label for="longitudPrincipal">Longitud de acometida principal (m)</label>
+        <input type="number" id="longitudPrincipal" value="20">
       </div>
-      <button class="btn btn-primary">✓ Configurar Sistema</button>
+      <button id="btnConfigurar" class="btn btn-primary">✓ Configurar Sistema</button>
 
-      <div class="summary-box">
+      <div id="panelTablero" class="summary-box" style="display: none;">
         <h3>📊 Tablero Principal</h3>
-        <div class="stats-grid">
-          <div class="stat">
-            <div class="label">I Máxima</div>
-            <div class="value">- A</div>
-          </div>
-        </div>
+        <div id="resumenTablero"></div>
       </div>
     </section>
 
-    <!-- ⚙ Agregar Circuitos -->
-    <section class="panel circuits-panel">
+    <section class="panel">
       <h2>⚙ Agregar Circuitos</h2>
-      <div class="form-group">
-        <label>Tipo de Circuito</label>
-        <select>
-          <option>-- Seleccionar --</option>
-          <option>Iluminación</option>
-          <option>Tomacorriente</option>
-          <option>Cocina/Comedor</option>
-          <option>Lavarropas</option>
-          <option>Aire Acondicionado</option>
-          <option>Calefactor</option>
-          <option>Calentador de agua</option>
-          <option>Otro</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Ambiente/Descripción</label>
-        <input type="text" placeholder="Ej: Cocina Principal">
-      </div>
-      <div class="form-group">
-        <label>Potencia (kW)</label>
-        <input type="number" placeholder="Ej: 1.5" step="0.1">
-      </div>
-      <div class="form-group">
-        <label>Longitud del circuito (m)</label>
-        <input type="number" placeholder="Ej: 15">
-      </div>
-      <div class="form-group">
-        <label>Caída de tensión máxima permitida (%)</label>
-        <select>
-          <option>3% (Ramales)</option>
-          <option>5% (Circuitos)</option>
-          <option>8% (Total)</option>
-        </select>
-      </div>
-      <div class="actions-export">
-        <button class="btn btn-primary">+ Agregar</button>
-        <button class="btn">Limpiar</button>
-      </div>
+      <form id="circuitForm" onsubmit="return false;">
+        <div class="form-group">
+          <label for="tipoCircuito">Tipo de Circuito</label>
+          <select id="tipoCircuito">
+            <option value="">-- Seleccionar --</option>
+            <option value="Iluminación">Iluminación</option>
+            <option value="Tomacorriente">Tomacorriente</option>
+            <option value="Cocina/Comedor">Cocina/Comedor</option>
+            <option value="Lavarropas">Lavarropas</option>
+            <option value="Aire Acondicionado">Aire Acondicionado</option>
+            <option value="Calefactor">Calefactor</option>
+            <option value="Calentador de agua">Calentador de agua</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="ambiente">Ambiente/Descripción</label>
+          <input type="text" id="ambiente" placeholder="Ej: Cocina, Dormitorio">
+        </div>
+        <div class="form-group">
+          <label for="potenciaCircuito">Potencia (kW)</label>
+          <input type="number" id="potenciaCircuito" step="0.01" placeholder="Ej: 1.5">
+        </div>
+        <div class="form-group">
+          <label for="longitud">Longitud del circuito (m)</label>
+          <input type="number" id="longitud" placeholder="Ej: 15">
+        </div>
+        <div class="form-group">
+          <label for="caida">Caída de tensión máxima permitida (%)</label>
+          <select id="caida">
+            <option value="3">3% (Ramales)</option>
+            <option value="5" selected>5% (Circuitos)</option>
+            <option value="8">8% (Total)</option>
+          </select>
+        </div>
+        <div class="actions-export" style="margin-top: 1rem;">
+          <button type="submit" class="btn btn-primary">+ Agregar</button>
+          <button type="button" id="btnLimpiarForm" class="btn">Limpiar</button>
+        </div>
+      </form>
     </section>
 
-    <!-- 📊 Resumen de Circuitos -->
-    <section class="panel results-panel">
+    <section class="panel">
       <h2>📊 Resumen de Circuitos</h2>
       <div id="tableWrap">
-        <table>
+        <table id="circuitsTable">
           <thead>
             <tr>
               <th>Tipo</th>
@@ -120,19 +128,20 @@
               <th>Acción</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td colspan="8" class="empty-state">
-                No hay circuitos agregados<br>Agrega circuitos para ver el resumen
-              </td>
-            </tr>
-          </tbody>
+          <tbody></tbody>
         </table>
+        <div id="emptyState" class="empty-state">
+          No hay circuitos agregados. Agrega circuitos para ver el resumen.
+        </div>
+      </div>
+
+      <div id="resumenCircuitos" class="summary-box">
+        <p style="text-align:center;opacity:0.7">Agrega circuitos para ver el resumen</p>
       </div>
 
       <div class="actions-export">
-        <button class="btn btn-primary">📄 Exportar Proyecto PDF</button>
-        <button class="btn btn-delete">🗑 Limpiar Todo</button>
+        <button id="btnExport" class="btn">📄 Exportar Proyecto PDF</button>
+        <button id="btnLimpiarTodo" class="btn btn-delete">🗑 Limpiar Todo</button>
       </div>
     </section>
   </main>
@@ -140,13 +149,19 @@
   <footer class="footer">
     <div class="footer-content">
       <small>© 2026 R-TECH | Calculador AEA | Autor: Juan Pablo Rodríguez</small>
-      <a href="https://wa.me/543813399196" class="whatsapp-btn" target="_blank">
+      <a href="https://wa.me" class="whatsapp-btn" target="_blank">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M12.012 2c-5.508 0-9.986 4.478-9.986 9.986 0 1.758.459 3.473 1.332 4.992L2 22l5.131-1.346a9.927 9.927 0 004.876 1.278h.005c5.507 0 9.986-4.479 9.986-9.987C21.998 6.478 17.52 2 12.012 2zm6.015 14.168c-.263.743-1.527 1.349-2.126 1.421-.575.069-1.326.113-3.69-.863-3.023-1.248-4.949-4.32-5.1-4.521-.151-.202-1.206-1.603-1.206-3.059 0-1.455.763-2.17.1035-2.464-.262-.294-.575-.367-.763-.367-.188 0-.413.069-.626.294-.213.22-.813.793-.813 1.933 0 1.139.826 2.24 1.939 3.729 1.114 1.489 2.428 2.662 3.69 3.204.34.146.678.238.924.316.353.111.674.096.927.058.283-.042.873-.357 1.096-.999.223-.642.223-1.192.156-1.307-.066-.115-.245-.183-.513-.317-.267-.134-1.583-.781-1.829-.871-.247-.089-.427-.134-.606.134-.18.267-.693.871-.85 1.05-.157.178-.314.201-.582.067-.268-.134-1.13-.417-2.153-1.331-.796-.71-1.333-1.586-1.49-1.854-.157-.267-.017-.412.117-.545.121-.12.268-.313.402-.469.134-.156.179-.268.268-.446.089-.178.045-.335-.022-.469-.067-.134-.606-1.46-.83-2.001-.219-.527-.441-.454-.606-.462-.153-.008-.33-.009-.508-.009z"/>
         </svg>
         WhatsApp
       </a>
     </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
   </footer>
 
 </body>
