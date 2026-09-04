@@ -313,6 +313,19 @@ td {
 .valido { color: var(--success); font-weight: bold; }
 .invalido { color: var(--danger); font-weight: bold; }
 
+.alerta-potencia {
+  color: var(--danger);
+  font-weight: bold;
+  text-align: center;
+}
+
+.nota-diferencial {
+  opacity: 0.85;
+  font-size: 0.9em;
+  text-align: center;
+  font-weight: normal;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));

@@ -118,10 +118,10 @@
       <div class="form-group">
         <label for="caida">Caída de tensión máxima permitida (%)</label>
         <select id="caida">
-          <option value="3">3% (Ramales)</option>
-          <option value="5">5% (Circuitos)</option>
-          <option value="8">8% (Total)</option>
+          <option value="3">3% (Iluminación / Tomacorrientes - uso general)</option>
+          <option value="5">5% (circuitos que alimentan solo motores)</option>
         </select>
+        <small style="opacity:0.7">Se autoselecciona según el tipo de circuito (AEA 90364-7-771, cláus. 771.13.b); podés cambiarlo si tenés un criterio justificado.</small>
       </div>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">+ Agregar</button>
@@ -148,6 +148,7 @@
             <th>I (A)</th>
             <th>Cable</th>
             <th>Térmica</th>
+            <th>PE (tierra)</th>
             <th>Caída (V)</th>
             <th>Acción</th>
           </tr>
