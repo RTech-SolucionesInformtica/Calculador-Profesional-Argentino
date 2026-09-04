@@ -322,7 +322,36 @@ function renderResumenTotal() {
   `;
 }
 
-function exportarPDF() { window.print(); }
+// NUEVO: arma el encabezado del informe (fecha + resumen del sistema
+// configurado) justo antes de imprimir/exportar, para que el PDF se
+// vea como un informe técnico y no como una captura de la web.
+function prepararEncabezadoImpresion() {
+  const printMeta = document.getElementById('printMeta');
+  const fecha = new Date().toLocaleString('es-AR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+
+  let sistemaHTML = '<span style="opacity:0.6">Sistema no configurado</span>';
+  if (proyectoActual.tipoSistema) {
+    sistemaHTML = `
+      ${proyectoActual.tipoSistema.toUpperCase()} ·
+      Potencia contratada: <strong>${proyectoActual.potenciaTotal} kW</strong> ·
+      cos φ: <strong>${proyectoActual.factorPotencia}</strong> ·
+      Acometida: <strong>${proyectoActual.longitudPrincipal} m</strong>
+    `;
+  }
+
+  printMeta.innerHTML = `
+    <div class="print-meta-row"><strong>Fecha del informe:</strong> ${fecha}</div>
+    <div class="print-meta-row"><strong>Configuración del sistema:</strong> ${sistemaHTML}</div>
+  `;
+}
+
+function exportarPDF() {
+  prepararEncabezadoImpresion();
+  window.print();
+}
 
 function limpiarTodo() {
   if (confirm('¿Eliminar todo el proyecto? Esta acción no se puede deshacer.')) {
