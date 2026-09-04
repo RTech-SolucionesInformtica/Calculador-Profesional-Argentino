@@ -86,6 +86,7 @@ html, body {
 
 .title-block {
   flex: 1;
+  min-width: 0; /* permite que el título se achique/ajuste en pantallas angostas */
 }
 
 .title-block h1 {
@@ -150,6 +151,9 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0; /* clave: evita que el contenido interno (ej. la tabla ancha)
+                   fuerce el ancho de la columna del grid y se corte por el
+                   overflow-x:hidden del body */
 }
 
 /* ============================================
@@ -281,6 +285,7 @@ html, body {
 /* Contenedores de tablas */
 #tableWrap {
   overflow-x: auto;
+  max-width: 100%;
   border-radius: 10px;
   border: 1px solid var(--border-color);
   -webkit-overflow-scrolling: touch; /* Suavidad extra al hacer scroll en iOS */
