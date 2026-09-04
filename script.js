@@ -31,12 +31,18 @@ const CONDUCTORES_AEA = [
 
 // NUEVO: secciones mínimas exigidas por la AEA 90364 según tipo de
 // circuito, independientemente de la corriente que dé el cálculo.
-// TUG (tomas de uso general): mín. 2.5mm²/20A.
+// TUG (tomas de uso general): el mínimo depende del tipo de
+// tomacorriente instalado (AEA 90364-7-770):
+//   - Tomas comunes 2P+T IRAM 2071 (10A por boca) -> disyuntor máx. 16A
+//   - Tomas industriales IRAM IEC 60309 (16A por boca) -> disyuntor máx. 20A
 // TUE (circuitos especiales - cocina, lavarropas, calefacción, etc.): mín. 4mm²/25A.
 // Verificar siempre contra la tabla AEA vigente según el método de instalación real.
 const MINIMOS_AEA = {
   'Iluminación': { mm2: 1.5, disyuntor: 10 },
-  'Tomacorriente': { mm2: 2.5, disyuntor: 20 },
+  'Tomacorriente': {
+    '10A': { mm2: 2.5, disyuntor: 16 },
+    '16A': { mm2: 2.5, disyuntor: 20 }
+  },
   'Cocina/Comedor': { mm2: 4, disyuntor: 25 },
   'Lavarropas': { mm2: 4, disyuntor: 25 },
   'Aire Acondicionado': { mm2: 4, disyuntor: 25 },
@@ -84,8 +90,14 @@ function encontrarConductor(corriente) {
 
 // NUEVO: fuerza la sección/térmica mínima según el tipo de circuito
 // (AEA exige mínimos por tipo, sin importar cuán baja sea la potencia declarada).
-function aplicarMinimoAEA(tipoCircuito, conductorCalculado) {
-  const minimo = MINIMOS_AEA[tipoCircuito];
+// Para 'Tomacorriente', el mínimo depende además del tipo de toma
+// (10A común o 16A industrial), por eso ahí MINIMOS_AEA guarda un
+// objeto anidado en vez de { mm2, disyuntor } directo.
+function aplicarMinimoAEA(tipoCircuito, conductorCalculado, tipoTomacorriente = '10A') {
+  let minimo = MINIMOS_AEA[tipoCircuito];
+  if (tipoCircuito === 'Tomacorriente' && minimo) {
+    minimo = minimo[tipoTomacorriente] || minimo['10A'];
+  }
   if (!minimo || conductorCalculado.mm2 === '>70') return conductorCalculado;
 
   return {
@@ -175,6 +187,14 @@ function renderResumenTablero() {
   `;
 }
 
+// NUEVO: muestra el selector de tipo de tomacorriente solo cuando
+// el tipo de circuito elegido es "Tomacorriente".
+function toggleGrupoTipoTomacorriente() {
+  const tipoCircuito = document.getElementById('tipoCircuito').value;
+  const grupo = document.getElementById('grupoTipoTomacorriente');
+  grupo.style.display = (tipoCircuito === 'Tomacorriente') ? 'block' : 'none';
+}
+
 function agregarCircuito(event) {
   event.preventDefault();
   
@@ -184,6 +204,7 @@ function agregarCircuito(event) {
   }
   
   const tipoCircuito = document.getElementById('tipoCircuito').value;
+  const tipoTomacorriente = document.getElementById('tipoTomacorriente').value || '10A';
   const ambiente = document.getElementById('ambiente').value.trim();
   const potenciaCircuito = Number(document.getElementById('potenciaCircuito').value);
   const longitud = Number(document.getElementById('longitud').value);
@@ -202,7 +223,7 @@ function agregarCircuito(event) {
   // CORREGIDO: aplica la sección/térmica mínima exigida por AEA según
   // el tipo de circuito (tomas, cocina, lavarropas, etc.), aunque la
   // corriente calculada hubiera alcanzado con un cable más chico.
-  conductor = aplicarMinimoAEA(tipoCircuito, conductor);
+  conductor = aplicarMinimoAEA(tipoCircuito, conductor, tipoTomacorriente);
 
   // La caída de tensión se recalcula con el conductor definitivo
   // (puede haber cambiado de tamaño al aplicar el mínimo AEA).
@@ -212,6 +233,7 @@ function agregarCircuito(event) {
   const circuito = {
     id: Date.now(),
     tipoCircuito,
+    tipoTomacorriente: tipoCircuito === 'Tomacorriente' ? tipoTomacorriente : null,
     ambiente,
     potenciaCircuito,
     longitud,
@@ -261,6 +283,7 @@ function renderTablaCircuitos() {
     
     tr.innerHTML = `
       <td>${circuito.tipoCircuito}</td>
+      <td>${circuito.tipoTomacorriente || '-'}</td>
       <td>${circuito.ambiente}</td>
       <td>${circuito.potenciaCircuito}</td>
       <td>${circuito.corriente}</td>
@@ -354,7 +377,15 @@ function initApp() {
   
   document.getElementById('btnConfigurar').addEventListener('click', configurarSistema);
   document.getElementById('circuitForm').addEventListener('submit', agregarCircuito);
-  document.getElementById('btnLimpiarForm').addEventListener('click', () => document.getElementById('circuitForm').reset());
+  document.getElementById('btnLimpiarForm').addEventListener('click', () => {
+    document.getElementById('circuitForm').reset();
+    toggleGrupoTipoTomacorriente();
+  });
+
+  // NUEVO: el selector de tipo de tomacorriente solo tiene sentido
+  // cuando el circuito elegido es "Tomacorriente"; se oculta para el resto.
+  document.getElementById('tipoCircuito').addEventListener('change', toggleGrupoTipoTomacorriente);
+  toggleGrupoTipoTomacorriente();
   document.getElementById('btnExport').addEventListener('click', exportarPDF);
   document.getElementById('btnLimpiarTodo').addEventListener('click', limpiarTodo);
   
