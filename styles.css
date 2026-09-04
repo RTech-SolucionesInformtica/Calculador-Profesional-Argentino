@@ -608,12 +608,39 @@ td {
     color: #1a1a1a;
     margin-top: 14px;
   }
+  /* El amarillo de marca (#FFEA00) se pierde por contraste sobre
+     fondo blanco; se oscurece solo para el informe impreso. */
+  .logo svg rect[fill="#FFEA00"] {
+    fill: #B8860C !important;
+  }
+  .logo svg path[stroke="#FFEA00"],
+  .logo svg line[stroke="#FFEA00"] {
+    stroke: #B8860C !important;
+  }
+  .logo svg {
+    filter: none;
+  }
+
   .stat {
     background: white;
     border: 1px solid #ddd;
+    padding: 8px 6px;
   }
   .stat .value {
     color: #1a1a1a !important;
+  }
+
+  /* Tarjetas de resumen: más anchas y en una sola línea, para que
+     "Potencia total: 1.50 kW" no se corte en dos renglones. */
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+  }
+  .stat .label,
+  .stat .value {
+    display: inline;
+    white-space: nowrap;
+    font-size: 12px;
   }
 
   /* Pie de informe con aclaración técnica */
