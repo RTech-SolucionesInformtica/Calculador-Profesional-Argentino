@@ -2,6 +2,21 @@
 // CONFIGURACIÓN TÉCNICA E INGENIERÍA ELÉCTRICA
 // ============================================
 
+// NUEVO (AEA 770, pág. 45): valores de la constante "k" para la
+// verificación térmica de cortocircuito k²S² ≥ I²t, según el tipo de
+// aislación del conductor (conductores de cobre, tabla usual IEC
+// 60364-4-43 / 60364-5-54 tabla 43A, valores para "conductor aislado no
+// incluido en un cable" temperatura inicial 30°C):
+//   PVC (hasta 70°C)         -> k = 115
+//   XLPE / EPR (hasta 90°C)  -> k = 143
+// Se usa el valor conservador de conductor aislado individual (no cable
+// multipolar), que es el caso típico de instalación domiciliaria en
+// cañería embutida (IRAM NM 247-3 unipolar).
+const K_AISLACION = {
+  PVC: 115,
+  XLPE: 143
+};
+
 const STORAGE_KEY = 'aea_proyectos_v1';
 
 // TENSIONES CORREGIDAS SEGÚN REGLAMENTACIÓN AEA (ARGENTINA)
@@ -14,12 +29,22 @@ const TENSIONES = {
 // CORREGIDO: los disyuntores ahora usan la serie normalizada IEC 60898
 // (10-16-20-25-32-40-50-63-80-100-125-160-200A). Los valores 15A y 30A
 // del original no existen como térmicas comerciales.
+// CORREGIDO contra la Tabla "Calibre máximo de las protecciones para los
+// cables" de la Guía AEA 770 (pág. 40, columna "cable tipo domiciliario
+// IRAM NM 247-3 en cañería embutida, 1 circuito por caño"):
+//   1,5 mm² -> ≤15 A   2,5 mm² -> ≤20 A   4 mm² -> ≤25 A   6 mm² -> ≤32 A
+// Antes el código permitía 4mm²→32A y 6mm²→40A, superando el máximo de
+// la tabla: una térmica sobredimensionada para la sección del cable puede
+// no cortar antes de que el conductor se recaliente (viola Ib≤In≤Iz,
+// 770.15.3). Las secciones mayores a 6mm² no figuran en la tabla de esta
+// guía simplificada; se mantienen como estimación a verificar contra la
+// tabla completa de AEA 90364-5-52/770-B.
 const CONDUCTORES_AEA = [
   { amperios: 10, mm2: 1.5, disyuntor: 10 },
   { amperios: 16, mm2: 2.5, disyuntor: 16 },
   { amperios: 20, mm2: 2.5, disyuntor: 20 },
-  { amperios: 32, mm2: 4, disyuntor: 32 },
-  { amperios: 40, mm2: 6, disyuntor: 40 },
+  { amperios: 25, mm2: 4, disyuntor: 25 },
+  { amperios: 32, mm2: 6, disyuntor: 32 },
   { amperios: 50, mm2: 10, disyuntor: 50 },
   { amperios: 63, mm2: 10, disyuntor: 63 },
   { amperios: 80, mm2: 16, disyuntor: 80 },
@@ -28,6 +53,75 @@ const CONDUCTORES_AEA = [
   { amperios: 160, mm2: 50, disyuntor: 160 },
   { amperios: 200, mm2: 70, disyuntor: 200 }
 ];
+
+// NUEVO: Tabla "Calibre máximo de las protecciones para los cables" (Guía
+// AEA 770, pág. 40) — columna cable domiciliario IRAM NM 247-3 en cañería
+// embutida, discriminada por cantidad de circuitos que comparten el mismo
+// caño (770.12.II). Antes la app asumía siempre "1 circuito por caño"
+// para cualquier instalación, lo cual sobrestima la corriente admisible
+// real cuando dos o más circuitos van agrupados en la misma canalización
+// (caso muy común en la práctica: por ejemplo, todos los TUG de una
+// vivienda saliendo del tablero por el mismo caño).
+// Solo cubre 1,5/2,5/4/6 mm² y 1/2/3 circuitos, que es lo único que
+// figura como texto en esta guía; para secciones mayores o agrupamientos
+// de más de 3 circuitos no hay dato en el documento y se mantiene el
+// criterio de 1 circuito por caño con una advertencia.
+const CALIBRE_MAX_AGRUPAMIENTO_770 = {
+  1.5: { 1: 15, 2: 10, 3: 10 },
+  2.5: { 1: 20, 2: 15, 3: 13 },
+  4:   { 1: 25, 2: 20, 3: 16 },
+  6:   { 1: 32, 2: 25, 3: 25 }
+};
+
+// Serie comercial de térmicas IEC 60898 usada en toda la app.
+const SERIE_DISYUNTORES = [10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 200];
+
+// Elige la térmica comercial más grande que sea >= corriente de empleo Ib
+// y al mismo tiempo <= el máximo admitido por el cable (maxAdmitido, ya
+// sea de la tabla de agrupamiento o de la tabla simple).
+// CORREGIDO (bug de seguridad detectado en revisión): la versión anterior,
+// cuando ninguna térmica comercial cumplía ambas condiciones a la vez
+// (por ejemplo Ib=12A con maxAdmitido=15A, donde la serie comercial salta
+// de 10A a 16A), elegía la térmica MAYOR que no superara maxAdmitido —en
+// ese ejemplo, 10A— devolviendo una térmica por DEBAJO de la corriente de
+// diseño (In=10A < Ib=12A). Eso viola la condición básica Ib≤In≤Iz y el
+// circuito terminaba mostrado como "cumple" (verde) en la tabla principal,
+// porque esa tabla solo valida la caída de tensión, no la coordinación
+// cable-térmica. Ahora, si no hay ninguna térmica que cumpla Ib≤In≤maxAdmitido,
+// se devuelve null para que el llamador pruebe con la sección de cable
+// siguiente en vez de aceptar una térmica subdimensionada.
+function elegirDisyuntorComercial(corriente, maxAdmitido) {
+  const candidatos = SERIE_DISYUNTORES.filter(d => d >= corriente && d <= maxAdmitido);
+  return candidatos.length > 0 ? Math.min(...candidatos) : null;
+}
+
+// Devuelve el conductor (mm², disyuntor) más chico que admite la
+// "corriente" dada, respetando el calibre máximo de protección para la
+// cantidad de "circuitosPorCano" indicada (1, 2 o 3). Para secciones no
+// cubiertas por CALIBRE_MAX_AGRUPAMIENTO_770 (>6mm²) se usa el criterio
+// de 1 circuito por caño de CONDUCTORES_AEA, ya que la guía no da esos
+// valores agrupados.
+function encontrarConductorConAgrupamiento(corriente, circuitosPorCano = 1) {
+  const secciones = [1.5, 2.5, 4, 6];
+  for (const mm2 of secciones) {
+    const tabla = CALIBRE_MAX_AGRUPAMIENTO_770[mm2];
+    const maxAdmitido = tabla[circuitosPorCano] ?? tabla[3]; // >3 circuitos: usar el más restrictivo disponible como piso conservador
+    if (corriente <= maxAdmitido) {
+      const disyuntor = elegirDisyuntorComercial(corriente, maxAdmitido);
+      // Si esta sección de cable no tiene ninguna térmica comercial que
+      // respete Ib≤In≤maxAdmitido, se prueba con la sección siguiente
+      // (más grande) en vez de aceptar una térmica subdimensionada.
+      if (disyuntor !== null) {
+        return { mm2, disyuntor, amperios: maxAdmitido };
+      }
+    }
+  }
+  // Fuera del rango cubierto por la tabla de agrupamiento (>6mm²), o
+  // ninguna sección de la tabla tenía una térmica válida: cae al
+  // criterio de 1 circuito por caño ya existente, con nota de que el
+  // agrupamiento no está verificado para esta sección.
+  return encontrarConductor(corriente);
+}
 
 // NUEVO: secciones mínimas exigidas por la AEA 90364 según tipo de
 // circuito, independientemente de la corriente que dé el cálculo.
@@ -72,6 +166,14 @@ const COS_PHI_TIPOS = {
   'Tomacorriente': 0.95,
   'Otro': 0.95
 };
+
+// NUEVO: factor de simultaneidad exigido por AEA 90364-7-770, Tabla 770.8.I,
+// nota (2): "A la potencia total del circuito IUG debe afectársela por el
+// Factor de Simultaneidad 2/3, para los otros circuitos el Factor de
+// Simultaneidad se toma igual a 1". Verificado además contra el ejemplo
+// numérico de la guía (pág. 27-29): 15 bocas x 60 VA/boca x 2/3 = 600 VA,
+// que da exactamente Ib = 600/220 = 2,73 A, el valor que usa la guía.
+const FACTOR_SIMULTANEIDAD_IUG = 2 / 3;
 
 function obtenerCosPhiCircuito(tipoCircuito, cosPhiGeneral) {
   const cosPhiTipo = COS_PHI_TIPOS[tipoCircuito];
@@ -128,6 +230,10 @@ let proyectoActual = {
   potenciaTotal: 0,
   factorPotencia: 0.95,
   longitudPrincipal: 20,
+  iccOrigen: null,
+  poderCorteTermicas: 6,
+  tipoAislacion: 'PVC',
+  i2tTermicas: null,
   circuitos: []
 };
 
@@ -233,6 +339,46 @@ function cargarProyecto() {
   return false;
 }
 
+// NUEVO (AEA 770, pág. 45): energía específica pasante máxima que admite
+// un conductor sin dañarse térmicamente ante un cortocircuito adiabático:
+//   k²S² ≥ I²t
+// donde S es la sección del conductor (mm²) y k depende de su aislación
+// (ver K_AISLACION). Devuelve el valor máximo admitido en A²·s.
+function calcularEnergiaMaximaConductor(mm2, tipoAislacion) {
+  const k = K_AISLACION[tipoAislacion] || K_AISLACION.PVC;
+  return Math.pow(k * mm2, 2);
+}
+
+// NUEVO (AEA 770, pág. 45, "Verificación de los cables a las
+// sobrecorrientes"): "Se debe cumplir PdCcc ≥ I''k", donde I''k es la
+// máxima corriente de cortocircuito en el punto donde está instalado el
+// dispositivo de protección (dato que debe dar la empresa distribuidora)
+// y PdCcc es el poder de corte del interruptor (dato de placa).
+function evaluarPoderDeCorte() {
+  const contenedor = document.getElementById('resultadoPoderCorte');
+  if (!contenedor) return;
+
+  const icc = proyectoActual.iccOrigen;
+  const pdc = proyectoActual.poderCorteTermicas;
+
+  if (!icc) {
+    contenedor.innerHTML = `
+      <span class="invalido">
+        ⚠️ Falta el dato de corriente de cortocircuito en el origen (Icc). Sin ese valor,
+        provisto por la empresa distribuidora, no se puede verificar que las térmicas elegidas
+        soporten el cortocircuito (AEA 770, 770.15, pág. 45: PdCcc ≥ I''k).
+      </span>`;
+    return;
+  }
+
+  const cumple = pdc >= icc;
+  contenedor.innerHTML = `
+    <span class="${cumple ? 'valido' : 'invalido'}">
+      PdCcc (${pdc} kA) ${cumple ? '≥' : '<'} I''k (${icc} kA) —
+      ${cumple ? '✓ el poder de corte declarado cubre la Icc informada' : '⚠️ el poder de corte declarado NO alcanza: elegir térmicas de mayor PdCcc'}
+    </span>`;
+}
+
 function renderResumenTablero() {
   const panel = document.getElementById('panelTablero');
   const resumen = document.getElementById('resumenTablero');
@@ -266,6 +412,8 @@ function renderResumenTablero() {
       <div class="stat"><span class="label">Caída:</span><span class="value">${caidaV}V (${caidaPorcentaje}%)</span></div>
     </div>
   `;
+
+  evaluarPoderDeCorte();
 }
 
 // NUEVO: muestra el selector de tipo de tomacorriente solo cuando
@@ -306,13 +454,36 @@ function agregarCircuito(event) {
     alert('⚠️ Completa todos los campos');
     return;
   }
+
+  // CORREGIDO: igual que en configurarSistema(), "!potenciaCircuito" y
+  // "!longitud" no detectan valores negativos, que producían corrientes
+  // y caídas de tensión negativas sin ningún aviso al usuario.
+  if (potenciaCircuito <= 0) {
+    alert('⚠️ La potencia del circuito debe ser mayor a 0');
+    return;
+  }
+  if (longitud <= 0) {
+    alert('⚠️ La longitud del circuito debe ser mayor a 0');
+    return;
+  }
   
   // CORREGIDO: usa el cos φ propio del tipo de carga (motores/compresores
   // tienen componente inductiva mayor), tomando el más conservador entre
   // ese valor y el cos φ general configurado por el usuario.
   const cosPhiCircuito = obtenerCosPhiCircuito(tipoCircuito, proyectoActual.factorPotencia);
-  const corriente = calcularCorriente(potenciaCircuito, proyectoActual.tipoSistema, cosPhiCircuito);
-  let conductor = encontrarConductor(corriente);
+
+  // NUEVO (AEA 770, Tabla 770.8.I nota 2): la potencia declarada para un
+  // circuito de Iluminación (IUG) se toma como potencia instalada, y a
+  // los efectos de dimensionar cable/térmica se le aplica el Factor de
+  // Simultaneidad 2/3. Para el resto de los circuitos (TUG, cocina,
+  // lavarropas, etc.) el factor es 1 (se usa la potencia declarada tal cual).
+  const potenciaDPMS = tipoCircuito === 'Iluminación'
+    ? potenciaCircuito * FACTOR_SIMULTANEIDAD_IUG
+    : potenciaCircuito;
+
+  const corriente = calcularCorriente(potenciaDPMS, proyectoActual.tipoSistema, cosPhiCircuito);
+  const circuitosPorCano = Number(document.getElementById('circuitosPorCano')?.value) || 1;
+  let conductor = encontrarConductorConAgrupamiento(corriente, circuitosPorCano);
 
   // CORREGIDO: aplica la sección/térmica mínima exigida por AEA según
   // el tipo de circuito (tomas, cocina, lavarropas, etc.), aunque la
@@ -333,7 +504,9 @@ function agregarCircuito(event) {
     tipoTomacorriente: tipoCircuito === 'Tomacorriente' ? tipoTomacorriente : null,
     ambiente,
     potenciaCircuito,
+    potenciaDPMS,
     longitud,
+    circuitosPorCano,
     caidaMaxima,
     cosPhiCircuito,
     corriente,
@@ -349,8 +522,26 @@ function agregarCircuito(event) {
   guardarProyecto();
   renderTablaCircuitos();
   
-  crearExplosionEnClick(event.clientX, event.clientY);
+  // CORREGIDO: "event" acá es el evento "submit" del formulario, que no
+  // tiene clientX/clientY (esas propiedades solo existen en eventos de
+  // mouse). Antes esto generaba chispas en una posición inválida
+  // (NaN, NaN) cada vez que se agregaba un circuito. Ahora se usa la
+  // posición del botón que se tocó/clickeó para agregar el circuito
+  // (event.submitter, con buen soporte en navegadores modernos), y si
+  // no está disponible simplemente se omite el efecto en vez de generar
+  // chispas mal ubicadas.
+  const boton = event.submitter;
+  if (boton && typeof boton.getBoundingClientRect === 'function') {
+    const rect = boton.getBoundingClientRect();
+    crearExplosionEnClick(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
   document.getElementById('circuitForm').reset();
+  // CORREGIDO: form.reset() no dispara el evento "change" del select
+  // tipoCircuito, así que el campo "Tipo de Tomacorriente" (que solo
+  // debe verse cuando el tipo elegido es "Tomacorriente") quedaba
+  // visible después de agregar el circuito, aunque el select ya haya
+  // vuelto a "-- Seleccionar --".
+  toggleGrupoTipoTomacorriente();
 }
 
 function eliminarCircuito(id) {
@@ -388,10 +579,11 @@ function renderTablaCircuitos() {
       <td>${escaparHTML(circuito.tipoCircuito)}</td>
       <td>${circuito.tipoTomacorriente || '-'}</td>
       <td>${escaparHTML(circuito.ambiente)}</td>
-      <td>${circuito.potenciaCircuito}</td>
+      <td>${circuito.potenciaCircuito}${circuito.tipoCircuito === 'Iluminación' ? ` <span style="opacity:0.65;font-size:11px;">(DPMS ×2/3 = ${circuito.potenciaDPMS.toFixed(2)} kW)</span>` : ''}</td>
       <td>${circuito.corriente}</td>
       <td><strong>${circuito.conductor} mm²</strong></td>
       <td>${circuito.disyuntor} A</td>
+      <td>${circuito.circuitosPorCano || 1}</td>
       <td>${circuito.seccionPE !== null ? circuito.seccionPE + ' mm²' : '-'}</td>
       <td class="${estadoClass}">${caidaTexto}</td>
       <td>
@@ -485,11 +677,22 @@ function exportarPDF() {
   window.print();
 }
 
+// CORREGIDO: "Limpiar Todo" decía borrar "todo el proyecto" pero solo
+// eliminaba STORAGE_KEY (sistema + circuitos). El checklist de la Sección
+// 770 (CHECKLIST_770_KEY) y los ambientes cargados (AMBIENTES_770_KEY)
+// quedaban guardados en localStorage y reaparecían después del reload,
+// lo cual no coincide con lo que el botón promete al usuario.
 function limpiarTodo() {
-  if (confirm('¿Eliminar todo el proyecto? Esta acción no se puede deshacer.')) {
-    proyectoActual = { tipoSistema: '', potenciaTotal: 0, factorPotencia: 0.95, longitudPrincipal: 20, circuitos: [] };
+  if (confirm('¿Eliminar todo el proyecto (sistema, circuitos, checklist y ambientes)? Esta acción no se puede deshacer.')) {
+    proyectoActual = {
+      tipoSistema: '', potenciaTotal: 0, factorPotencia: 0.95,
+      longitudPrincipal: 20, iccOrigen: null, poderCorteTermicas: 6,
+      tipoAislacion: 'PVC', i2tTermicas: null, circuitos: []
+    };
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(CHECKLIST_770_KEY);
+      localStorage.removeItem(AMBIENTES_770_KEY);
     } catch (err) {
       console.warn('No se pudo limpiar el almacenamiento:', err);
     }
@@ -502,9 +705,34 @@ function configurarSistema() {
   const potenciaTotal = Number(document.getElementById('potenciaTotal').value);
   const factorPotencia = Number(document.getElementById('factorPotencia').value);
   const longitudPrincipal = Number(document.getElementById('longitudPrincipal').value) || 20;
-  
+  const iccOrigen = Number(document.getElementById('iccOrigen').value) || null;
+  const poderCorteTermicas = Number(document.getElementById('poderCorteTermicas').value) || 6;
+  const tipoAislacion = document.getElementById('tipoAislacion').value || 'PVC';
+  const i2tTermicas = Number(document.getElementById('i2tTermicas').value) || null;
+
   if (!tipoSistema || !potenciaTotal) {
     alert('⚠️ Completa los datos obligatorios');
+    return;
+  }
+
+  // CORREGIDO: el chequeo "!potenciaTotal" solo detecta 0/vacío, no
+  // valores negativos (-5 es "truthy" en JS). Sin esta validación se
+  // podía configurar una potencia negativa y obtener corrientes/cables
+  // negativos sin ningún aviso.
+  if (potenciaTotal <= 0) {
+    alert('⚠️ La potencia total contratada debe ser mayor a 0');
+    return;
+  }
+  if (longitudPrincipal <= 0) {
+    alert('⚠️ La longitud de la acometida principal debe ser mayor a 0');
+    return;
+  }
+  if (iccOrigen !== null && iccOrigen <= 0) {
+    alert('⚠️ La corriente de cortocircuito (Icc) debe ser mayor a 0, o dejar el campo vacío si no se conoce el dato');
+    return;
+  }
+  if (i2tTermicas !== null && i2tTermicas <= 0) {
+    alert('⚠️ La energía específica pasante (I²t) debe ser mayor a 0, o dejar el campo vacío si no se conoce el dato');
     return;
   }
 
@@ -519,9 +747,15 @@ function configurarSistema() {
   proyectoActual.potenciaTotal = potenciaTotal;
   proyectoActual.factorPotencia = factorPotencia;
   proyectoActual.longitudPrincipal = longitudPrincipal;
+  proyectoActual.iccOrigen = iccOrigen;
+  proyectoActual.poderCorteTermicas = poderCorteTermicas;
+  proyectoActual.tipoAislacion = tipoAislacion;
+  proyectoActual.i2tTermicas = i2tTermicas;
   
   guardarProyecto();
   renderResumenTablero();
+  renderTablaCircuitos();
+  evaluarVerificacionTermica770(); // NUEVO: refresca la verificación térmica con los datos recién configurados
   alert('✓ Sistema configurado correctamente');
 }
 
@@ -532,6 +766,10 @@ function initApp() {
     document.getElementById('potenciaTotal').value = proyectoActual.potenciaTotal;
     document.getElementById('factorPotencia').value = proyectoActual.factorPotencia;
     document.getElementById('longitudPrincipal').value = proyectoActual.longitudPrincipal;
+    if (proyectoActual.iccOrigen) document.getElementById('iccOrigen').value = proyectoActual.iccOrigen;
+    if (proyectoActual.poderCorteTermicas) document.getElementById('poderCorteTermicas').value = proyectoActual.poderCorteTermicas;
+    if (proyectoActual.tipoAislacion) document.getElementById('tipoAislacion').value = proyectoActual.tipoAislacion;
+    if (proyectoActual.i2tTermicas) document.getElementById('i2tTermicas').value = proyectoActual.i2tTermicas;
     renderResumenTablero();
     renderTablaCircuitos();
   }
@@ -658,5 +896,675 @@ if (document.readyState === 'loading') {
     initApp();
   } catch (err) {
     console.error('Error al iniciar la app:', err);
+  }
+}
+
+// ============================================================
+// NUEVO BLOQUE ADITIVO — CHECKLIST NORMATIVO AEA 90364-7-770
+// (Sección 770 completa: 770.14 y 770.15).
+//
+// Este bloque NO modifica ninguna función, variable ni
+// configuración existente arriba: solo lee proyectoActual y
+// CONDUCTORES_AEA (ya declarados) para evaluar automáticamente
+// lo que puede derivarse de los circuitos cargados, y agrega su
+// propio listener de inicio en paralelo a initApp(), para que si
+// este bloque fallara por algún motivo, el resto de la app
+// (configuración, circuitos, exportación, efectos) siga
+// funcionando exactamente igual.
+//
+// Persiste en su propia clave de localStorage, separada de
+// STORAGE_KEY ('aea_proyectos_v1'), así que no interfiere con
+// guardarProyecto()/cargarProyecto().
+// ============================================================
+const CHECKLIST_770_KEY = 'aea_checklist770_v1';
+
+const CAMPOS_CHECKLIST_770 = [
+  'inputSupCubierta',
+  'inputSupSemicubierta',
+  'chk770_14_1_diferencial',
+  'chk770_14_2_aislacion',
+  'chk770_14_2_tomas',
+  'chk770_14_3_corte',
+  'chk770_14_3_continuidad',
+  'selEsquemaTierra',
+  'inputResistenciaTierra',
+  'chk770_15_4_dps',
+  'selTipoDPS',
+  'chk770_15_5_relesobre'
+];
+
+function guardarChecklist770() {
+  const data = {};
+  CAMPOS_CHECKLIST_770.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    data[id] = (el.type === 'checkbox') ? el.checked : el.value;
+  });
+  try {
+    localStorage.setItem(CHECKLIST_770_KEY, JSON.stringify(data));
+  } catch (err) {
+    console.warn('No se pudo guardar el checklist 770:', err);
+  }
+}
+
+function cargarChecklist770() {
+  let data = {};
+  try {
+    const raw = localStorage.getItem(CHECKLIST_770_KEY);
+    if (raw) data = JSON.parse(raw);
+  } catch (err) {
+    console.warn('No se pudo cargar el checklist 770 guardado:', err);
+  }
+  CAMPOS_CHECKLIST_770.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || !(id in data)) return;
+    if (el.type === 'checkbox') el.checked = !!data[id];
+    else el.value = data[id];
+  });
+}
+
+// Busca en la tabla de conductores ya existente (CONDUCTORES_AEA) la
+// corriente admisible (Iz) que corresponde a la térmica (In) asignada
+// al circuito, para verificar la coordinación Ib ≤ In ≤ Iz de 770.15.3.
+function obtenerIzParaDisyuntor(disyuntor) {
+  const fila = CONDUCTORES_AEA.find(c => c.disyuntor === disyuntor);
+  return fila ? fila.amperios : null;
+}
+
+function evaluarResistenciaTierra() {
+  const contenedor = document.getElementById('resultadoResistenciaTierra');
+  if (!contenedor) return;
+  const inputEl = document.getElementById('inputResistenciaTierra');
+  const resistencia = Number(inputEl ? inputEl.value : NaN);
+  if (!resistencia) {
+    contenedor.innerHTML = '';
+    return;
+  }
+  // Verificación orientativa Ra × IΔn ≤ 24V (criterio habitual para locales
+  // húmedos/exteriores) con el diferencial de 30mA típico. Es un criterio
+  // de referencia y no reemplaza el análisis normativo completo de tensión
+  // de contacto límite aplicable a cada caso.
+  const tensionContacto = resistencia * 0.03;
+  const cumple = tensionContacto <= 24;
+  contenedor.innerHTML = `
+    <span class="${cumple ? 'valido' : 'invalido'}">
+      Ra × IΔn ≈ ${tensionContacto.toFixed(1)} V con ID de 30mA
+      (${cumple ? 'dentro del límite orientativo de 24V' : 'supera el límite orientativo de 24V — revisar jabalina/electrodo'})
+    </span>`;
+}
+
+// Tabla 770.7.I - Resumen de los grados de electrificación, según la
+// superficie límite de aplicación (superficie cubierta + 50% de la semicubierta).
+function calcularSuperficieLimite(cubierta, semicubierta) {
+  return cubierta + 0.5 * semicubierta;
+}
+
+function determinarGradoElectrificacion(superficieLimite) {
+  if (superficieLimite <= 60) return 'Mínimo';
+  if (superficieLimite <= 130) return 'Medio';
+  if (superficieLimite <= 200) return 'Elevado';
+  return 'Superior';
+}
+
+// Tabla 770.7.II - Resumen de los números mínimos de circuitos por grado.
+const CIRCUITOS_MINIMOS_770_7 = {
+  'Mínimo':   { total: 2, texto: '1 circuito de Iluminación de uso general (IUG) + 1 de Tomacorrientes de uso general (TUG)' },
+  'Medio':    { total: 3, texto: '3 circuitos de uso general: 2 IUG + 1 TUG, o bien 1 IUG + 2 TUG' },
+  'Elevado':  { total: 5, texto: '5 circuitos de uso general: 2 IUG + 3 TUG, o bien 3 IUG + 2 TUG' },
+  'Superior': { total: 6, texto: '6 circuitos: 2 IUG + 3 TUG + 1 de libre elección, o bien 3 IUG + 2 TUG + 1 de libre elección' }
+};
+
+// Tabla 770.8.II - Coeficientes de simultaneidad según el grado de electrificación.
+const COEFICIENTE_SIMULTANEIDAD_770_8 = {
+  'Mínimo': 1,
+  'Medio': 0.8,
+  'Elevado': 0.7,
+  'Superior': 0.6
+};
+
+// ============================================================
+// NUEVO — Tabla 770.7.III: puntos mínimos de utilización por
+// ambiente (IUG/TUG). Módulo independiente y aditivo: usa su
+// propia clave de localStorage (AMBIENTES_770_KEY) y su propio
+// array (ambientesChecklist770), sin tocar proyectoActual ni
+// CHECKLIST_770_KEY, para no interferir con nada ya existente.
+//
+// Solo se calculan automáticamente los casos donde el texto de
+// la norma (770.7.1) es puntual y verificable:
+//   - Dormitorio, según tramo de superficie (≤10 m² y ≤36 m²).
+//   - Kitchinette (770.7.1.o): regla fija, independiente del
+//     resto de los mínimos del ambiente donde se ubica.
+//   - Estar/Comedor/Escritorio/Estudio/Biblioteca (Tabla 770.7.III,
+//     confirmada por el usuario contra el PDF de la guía AEA 770):
+//     IUG = 1 boca cada 18 m² o fracción (mínimo 1); TUG = 1 boca
+//     cada 6 m² o fracción (mínimo 2); TUE no exigible. Estos
+//     valores son iguales para los 4 grados de electrificación.
+// Para el resto de los destinos (Cocina, Baño, Lavadero, Pasillo,
+// Garage, Otro) la Tabla 770.7.III fija mínimos que no pude
+// verificar con certeza completa contra el texto vigente; por eso
+// esos casos quedan como carga MANUAL (el profesional los completa
+// mirando la tabla), en vez de arriesgar un número mal calculado
+// en una herramienta de cumplimiento normativo.
+// ============================================================
+const AMBIENTES_770_KEY = 'aea_checklist770_ambientes_v1';
+let ambientesChecklist770 = [];
+
+const TIPOS_AMBIENTE_AUTOMATICOS_770 = ['Dormitorio', 'Kitchinette', 'Estar/Comedor'];
+
+// Tabla 770.7.III (parcial, casos verificados) - Dormitorio,
+// Kitchinette y Estar/Comedor.
+function calcularMinimoAmbiente770(tipo, superficie) {
+  if (tipo === 'Estar/Comedor') {
+    if (!superficie || superficie <= 0) return null;
+    const iug = Math.max(Math.ceil(superficie / 18), 1);
+    const tug = Math.max(Math.ceil(superficie / 6), 2);
+    return {
+      iug,
+      tug,
+      nota: `Estar/Comedor ${superficie} m² — IUG: 1 boca c/18 m² o fracción (mín. 1); TUG: 1 boca c/6 m² o fracción (mín. 2); TUE no exigible. Igual en los 4 grados (770.7.III)`
+    };
+  }
+  if (tipo === 'Dormitorio') {
+    if (!superficie || superficie <= 0) return null;
+    if (superficie <= 10) {
+      return { iug: 1, tug: 2, nota: 'Dormitorio ≤10 m² (770.7.III)' };
+    }
+    if (superficie <= 36) {
+      return { iug: 1, tug: 3, nota: 'Dormitorio >10 m² y ≤36 m² (770.7.III)' };
+    }
+    return { iug: null, tug: null, nota: '⚠️ Dormitorio >36 m²: tramo no verificado en esta calculadora, cargar manualmente según tabla vigente' };
+  }
+  if (tipo === 'Kitchinette') {
+    return {
+      iug: 1,
+      tug: 2,
+      nota: '770.7.1.o): además, 1 tomacorriente para artefacto de ubicación fija, independiente de los mínimos del ambiente donde se ubica'
+    };
+  }
+  return null;
+}
+
+function actualizarCamposAmbiente770() {
+  const tipo = document.getElementById('tipoAmbiente770')?.value;
+  const campoSuperficie = document.getElementById('campoSuperficieAmbiente770');
+  const camposManuales = document.getElementById('camposManualesAmbiente770');
+  if (!campoSuperficie || !camposManuales) return;
+
+  const esAutomatico = TIPOS_AMBIENTE_AUTOMATICOS_770.includes(tipo);
+  // Dormitorio y Estar/Comedor necesitan el dato de superficie para calcular
+  // el mínimo; Kitchinette es un valor fijo que no depende de la superficie.
+  const necesitaSuperficie = (tipo === 'Dormitorio' || tipo === 'Estar/Comedor');
+  campoSuperficie.style.display = necesitaSuperficie ? '' : 'none';
+  camposManuales.style.display = esAutomatico ? 'none' : '';
+}
+
+function agregarAmbiente770(event) {
+  event.preventDefault();
+
+  const tipo = document.getElementById('tipoAmbiente770').value;
+  const nombreInput = document.getElementById('nombreAmbiente770');
+  const nombre = nombreInput.value.trim() || tipo;
+  const superficie = Number(document.getElementById('superficieAmbiente770').value) || null;
+
+  let iug, tug, nota;
+
+  if (TIPOS_AMBIENTE_AUTOMATICOS_770.includes(tipo)) {
+    const necesitaSuperficie = (tipo === 'Dormitorio' || tipo === 'Estar/Comedor');
+    if (necesitaSuperficie && !superficie) {
+      alert('⚠️ Ingresá la superficie del ambiente para calcular el mínimo (770.7.III)');
+      return;
+    }
+    const minimo = calcularMinimoAmbiente770(tipo, superficie);
+    iug = minimo.iug;
+    tug = minimo.tug;
+    nota = minimo.nota;
+  } else {
+    const iugManual = document.getElementById('iugManualAmbiente770').value;
+    const tugManual = document.getElementById('tugManualAmbiente770').value;
+    if (iugManual === '' || tugManual === '') {
+      alert('⚠️ Completá los mínimos de IUG y TUG según la Tabla 770.7.III para este ambiente');
+      return;
+    }
+    iug = Number(iugManual);
+    tug = Number(tugManual);
+    nota = 'Cargado manualmente por el usuario (verificar contra 770.7.III vigente)';
+  }
+
+  ambientesChecklist770.push({
+    id: Date.now(),
+    tipo,
+    nombre,
+    superficie,
+    iug,
+    tug,
+    nota
+  });
+
+  guardarAmbientes770();
+  renderAmbientes770();
+  event.target.reset();
+  actualizarCamposAmbiente770();
+}
+
+function eliminarAmbiente770(id) {
+  if (!confirm('¿Eliminar este ambiente?')) return;
+  ambientesChecklist770 = ambientesChecklist770.filter(a => a.id !== id);
+  guardarAmbientes770();
+  renderAmbientes770();
+}
+
+function renderAmbientes770() {
+  const tbody = document.querySelector('#ambientesTable770 tbody');
+  const emptyState = document.getElementById('emptyStateAmbientes770');
+  if (!tbody || !emptyState) return;
+
+  tbody.innerHTML = '';
+
+  if (ambientesChecklist770.length === 0) {
+    emptyState.style.display = 'block';
+    actualizarResumenPuntosUtilizacion770();
+    return;
+  }
+  emptyState.style.display = 'none';
+
+  ambientesChecklist770.forEach(a => {
+    const tr = document.createElement('tr');
+    const pendiente = a.iug === null || a.tug === null;
+    tr.innerHTML = `
+      <td>${escaparHTML(a.nombre)}</td>
+      <td>${escaparHTML(a.tipo)}</td>
+      <td>${a.superficie ? a.superficie + ' m²' : '-'}</td>
+      <td class="${pendiente ? 'invalido' : ''}">${a.iug === null ? '⚠️' : a.iug}</td>
+      <td class="${pendiente ? 'invalido' : ''}">${a.tug === null ? '⚠️' : a.tug}</td>
+      <td style="font-size:12px; opacity:0.8;">${escaparHTML(a.nota)}</td>
+      <td><button data-id="${a.id}" class="btn-delete" title="Eliminar">🗑</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('.btn-delete').forEach(btn => {
+    // stopPropagation es necesario: el listener global de document (línea ~555)
+    // escucha cualquier click en .btn-delete y llama a eliminarCircuito(id).
+    // Sin esto, borrar un ambiente también dispararía el confirm() de
+    // "¿Eliminar este circuito?" por error, ya que reutilizamos la misma
+    // clase visual .btn-delete.
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      eliminarAmbiente770(Number(btn.dataset.id));
+    });
+  });
+
+  actualizarResumenPuntosUtilizacion770();
+}
+
+function actualizarResumenPuntosUtilizacion770() {
+  const contenedor = document.getElementById('resultadoPuntosUtilizacion770');
+  if (!contenedor) return;
+
+  if (ambientesChecklist770.length === 0) {
+    contenedor.innerHTML = 'Agregá ambientes para ver el total de puntos mínimos de utilización exigidos.';
+    return;
+  }
+
+  const pendientes = ambientesChecklist770.filter(a => a.iug === null || a.tug === null);
+  const totalIUG = ambientesChecklist770.reduce((sum, a) => sum + (a.iug || 0), 0);
+  const totalTUG = ambientesChecklist770.reduce((sum, a) => sum + (a.tug || 0), 0);
+
+  contenedor.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat"><span class="label">Ambientes cargados:</span><span class="value">${ambientesChecklist770.length}</span></div>
+      <div class="stat"><span class="label">Total bocas IUG mínimas:</span><span class="value">${totalIUG}${pendientes.length ? '+' : ''}</span></div>
+      <div class="stat"><span class="label">Total bocas TUG mínimas:</span><span class="value">${totalTUG}${pendientes.length ? '+' : ''}</span></div>
+    </div>
+    ${pendientes.length ? `<p class="invalido" style="margin:6px 0;">⚠️ ${pendientes.length} ambiente(s) con mínimo sin verificar — completalo manualmente contra la Tabla 770.7.III vigente.</p>` : ''}
+    <p style="opacity:0.7; font-size:12px; margin-top:6px;">
+      Esta suma es el mínimo normativo por ambiente. Falta verificar aparte, sobre el plano, que la
+      cantidad de bocas realmente instaladas en cada local cumpla estos mínimos.
+    </p>
+  `;
+}
+
+function guardarAmbientes770() {
+  try {
+    localStorage.setItem(AMBIENTES_770_KEY, JSON.stringify(ambientesChecklist770));
+  } catch (err) {
+    console.warn('No se pudieron guardar los ambientes (770.7.III):', err);
+  }
+}
+
+function cargarAmbientes770() {
+  try {
+    const raw = localStorage.getItem(AMBIENTES_770_KEY);
+    ambientesChecklist770 = raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    console.warn('No se pudieron cargar los ambientes (770.7.III):', err);
+    ambientesChecklist770 = [];
+  }
+}
+
+function actualizarGradoElectrificacion() {
+  const contenedor = document.getElementById('resultadoGradoElectrificacion');
+  if (!contenedor) return;
+
+  const inputCubierta = document.getElementById('inputSupCubierta');
+  const inputSemicubierta = document.getElementById('inputSupSemicubierta');
+  const cubierta = Number(inputCubierta ? inputCubierta.value : NaN) || 0;
+  const semicubierta = Number(inputSemicubierta ? inputSemicubierta.value : NaN) || 0;
+
+  if (!cubierta) {
+    contenedor.innerHTML = 'Ingresá la superficie cubierta para determinar el grado de electrificación (770.7).';
+    return;
+  }
+
+  const superficieLimite = calcularSuperficieLimite(cubierta, semicubierta);
+  const grado = determinarGradoElectrificacion(superficieLimite);
+  const minimos = CIRCUITOS_MINIMOS_770_7[grado];
+  const coefSimult = COEFICIENTE_SIMULTANEIDAD_770_8[grado];
+
+  // Cuenta, sin modificar la lógica original, los circuitos de uso general
+  // (Iluminación / Tomacorriente) que ya se cargaron en el panel de circuitos.
+  const iug = proyectoActual.circuitos.filter(c => c.tipoCircuito === 'Iluminación').length;
+  const tug = proyectoActual.circuitos.filter(c => c.tipoCircuito === 'Tomacorriente').length;
+  const totalGeneral = iug + tug;
+  const cumpleMinimo = totalGeneral >= minimos.total;
+
+  contenedor.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat"><span class="label">Superficie límite de aplicación:</span><span class="value">${superficieLimite.toFixed(1)} m²</span></div>
+      <div class="stat"><span class="label">Grado de electrificación:</span><span class="value">${grado}</span></div>
+      <div class="stat"><span class="label">Coef. simultaneidad (770.8.2):</span><span class="value">${coefSimult}</span></div>
+    </div>
+    <p style="margin:10px 0 4px 0;"><strong>Circuitos mínimos exigidos (770.7.5):</strong> ${minimos.texto}</p>
+    <p class="${cumpleMinimo ? 'valido' : 'invalido'}" style="margin:4px 0;">
+      Circuitos de uso general ya cargados arriba: ${totalGeneral} (IUG: ${iug} · TUG: ${tug})
+      — ${cumpleMinimo ? '✓ cumple la cantidad mínima exigida' : `⚠️ faltan circuitos para llegar al mínimo de ${minimos.total}`}
+    </p>
+    <p style="opacity:0.7; font-size:12px; margin-top:6px;">
+      Nota: la cantidad y ubicación de los puntos mínimos de utilización por ambiente (bocas de
+      iluminación/tomacorrientes según la Tabla 770.7.III) debe verificarse aparte, ambiente por ambiente.
+    </p>
+  `;
+}
+
+// NUEVO (AEA 770, pág. 45, "Verificación térmica de los cables al
+// cortocircuito"): k²S² ≥ I²t. Compara la energía específica pasante que
+// admite cada conductor (según su sección y tipo de aislación) contra la
+// energía específica pasante (I²t) que deja pasar la térmica instalada,
+// dato que debe tomarse de la curva del fabricante A LA MISMA Icc
+// declarada en "Corriente de cortocircuito presunta en el origen".
+//
+// LIMITACIÓN DECLARADA: al igual que la verificación de poder de corte,
+// esta app usa un único valor de I²t para toda la instalación (no permite
+// declarar un valor distinto por térmica/circuito), y no reduce la Icc
+// aguas abajo por la impedancia de cada tramo — usa el valor en el
+// origen para todos los conductores, que es la hipótesis más conservadora
+// (del lado seguro) pero no calcula la Icc real en cada punto.
+function evaluarVerificacionTermica770() {
+  const contenedor = document.getElementById('resultadoVerificacionTermica770');
+  if (!contenedor) return;
+
+  if (!proyectoActual.tipoSistema) {
+    contenedor.innerHTML = 'Configurá el sistema para evaluar este punto.';
+    return;
+  }
+
+  const i2t = proyectoActual.i2tTermicas;
+  if (!i2t) {
+    contenedor.innerHTML = `
+      <span class="invalido">
+        ⚠️ Falta el dato de energía específica pasante (I²t) de las térmicas, tomado de la
+        curva del fabricante a la Icc declarada. Sin ese valor no se puede verificar
+        k²S² ≥ I²t (AEA 770, 770.15, pág. 45).
+      </span>`;
+    return;
+  }
+
+  const tipoAislacion = proyectoActual.tipoAislacion || 'PVC';
+  let items = '';
+  let hayProblemas = false;
+  let hayNoVerificables = false;
+
+  // Conductor principal (acometida)
+  const corrientePrincipal = calcularCorriente(
+    proyectoActual.potenciaTotal, proyectoActual.tipoSistema, proyectoActual.factorPotencia
+  );
+  const conductorPrincipal = encontrarConductor(corrientePrincipal);
+  if (conductorPrincipal.mm2 === '>70') {
+    hayNoVerificables = true;
+    items += `
+      <div class="checklist-result-row">
+        Acometida principal: sección fuera de tabla — no verificable con esta app.
+      </div>`;
+  } else {
+    const permitida = calcularEnergiaMaximaConductor(conductorPrincipal.mm2, tipoAislacion);
+    const cumple = permitida >= i2t;
+    if (!cumple) hayProblemas = true;
+    items += `
+      <div class="checklist-result-row ${cumple ? 'valido' : 'invalido'}">
+        Acometida principal (${conductorPrincipal.mm2} mm² · ${tipoAislacion}):
+        k²S² = ${Math.round(permitida).toLocaleString('es-AR')} A²s
+        ${cumple ? '≥' : '<'} I²t (${Number(i2t).toLocaleString('es-AR')} A²s)
+        ${cumple ? ' ✓' : ' ⚠️ conductor insuficiente para el cortocircuito'}
+      </div>`;
+  }
+
+  // Cada circuito agregado
+  proyectoActual.circuitos.forEach(c => {
+    if (c.conductor === '>70') {
+      hayNoVerificables = true;
+      items += `
+        <div class="checklist-result-row">
+          ${escaparHTML(c.ambiente)}: sección fuera de tabla — no verificable con esta app.
+        </div>`;
+      return;
+    }
+    const permitida = calcularEnergiaMaximaConductor(c.conductor, tipoAislacion);
+    const cumple = permitida >= i2t;
+    if (!cumple) hayProblemas = true;
+    items += `
+      <div class="checklist-result-row ${cumple ? 'valido' : 'invalido'}">
+        ${escaparHTML(c.ambiente)} (${c.conductor} mm² · ${tipoAislacion}):
+        k²S² = ${Math.round(permitida).toLocaleString('es-AR')} A²s
+        ${cumple ? '≥' : '<'} I²t (${Number(i2t).toLocaleString('es-AR')} A²s)
+        ${cumple ? ' ✓' : ' ⚠️ conductor insuficiente para el cortocircuito'}
+      </div>`;
+  });
+
+  let resumen;
+  if (hayProblemas) {
+    resumen = '<div class="invalido" style="margin-top:8px;">⚠️ Hay conductores cuya sección no soporta térmicamente la I²t declarada — aumentar sección o instalar una térmica limitadora.</div>';
+  } else {
+    resumen = '<div class="valido" style="margin-top:8px;">✓ Todos los conductores verificables cumplen k²S² ≥ I²t.</div>';
+  }
+  if (hayNoVerificables) {
+    resumen += '<div style="opacity:0.7; font-size:12px; margin-top:4px;">Hay conductores fuera de la tabla simplificada de esta app; verificarlos manualmente.</div>';
+  }
+
+  contenedor.innerHTML = items + resumen + `
+    <p style="opacity:0.7; font-size:12px; margin-top:8px;">
+      El valor de I²t debe corresponder a la curva del fabricante A LA MISMA Icc declarada
+      en "Corriente de cortocircuito presunta en el origen" (${proyectoActual.iccOrigen ? proyectoActual.iccOrigen + ' kA' : 'sin dato'}).
+      Se usa el mismo I²t para toda la instalación y la Icc de origen para todos los tramos
+      (hipótesis conservadora, no calcula la Icc real aguas abajo de cada protección).
+    </p>`;
+}
+
+function actualizarResumenAuto77015() {
+  const contenedor = document.getElementById('resultadoAuto77015');
+  if (!contenedor) return;
+
+  if (!proyectoActual.tipoSistema || proyectoActual.circuitos.length === 0) {
+    contenedor.innerHTML = 'Configurá el sistema y agregá circuitos para evaluar este punto automáticamente.';
+    return;
+  }
+
+  let items = '';
+  let hayProblemas = false;
+
+  proyectoActual.circuitos.forEach(c => {
+    const iz = obtenerIzParaDisyuntor(c.disyuntor);
+    const fueraDeTabla = c.conductor === '>70';
+    const coordinaOk = !fueraDeTabla && iz !== null && c.corriente <= c.disyuntor && c.disyuntor <= iz;
+    if (!coordinaOk) hayProblemas = true;
+    items += `
+      <div class="checklist-result-row ${coordinaOk ? 'valido' : 'invalido'}">
+        ${escaparHTML(c.ambiente)} (${escaparHTML(c.tipoCircuito)}): Ib=${c.corriente}A ·
+        In=${fueraDeTabla ? '-' : c.disyuntor + 'A'} ·
+        Iz=${iz !== null ? iz + 'A' : '-'}
+        ${coordinaOk ? ' ✓ Coordinación Ib≤In≤Iz cumplida' : ' ⚠️ Revisar coordinación cable/protección'}
+      </div>`;
+  });
+
+  contenedor.innerHTML = items + (hayProblemas
+    ? '<div class="invalido" style="margin-top:8px;">⚠️ Hay circuitos que no cumplen la coordinación cable-protección exigida por 770.15.2/770.15.3.</div>'
+    : '<div class="valido" style="margin-top:8px;">✓ Todos los circuitos cumplen la coordinación cable-protección (770.15.1 a 770.15.3).</div>');
+}
+
+function calcularEstadoGeneralChecklist770() {
+  const contenedor = document.getElementById('estadoGeneralChecklist770');
+  if (!contenedor) return;
+
+  const idsBooleanos = [
+    'chk770_14_1_diferencial', 'chk770_14_2_aislacion', 'chk770_14_2_tomas',
+    'chk770_14_3_corte', 'chk770_14_3_continuidad'
+  ];
+  const marcados = idsBooleanos.filter(id => document.getElementById(id)?.checked).length;
+
+  const dps = document.getElementById('chk770_15_4_dps')?.checked;
+  const releSobre = document.getElementById('chk770_15_5_relesobre')?.checked;
+
+  const icc = proyectoActual.iccOrigen;
+  const pdc = proyectoActual.poderCorteTermicas;
+  const pdcTexto = !icc
+    ? 'Falta dato de Icc'
+    : (pdc >= icc ? `OK (${pdc}kA ≥ ${icc}kA)` : `⚠️ Insuficiente (${pdc}kA < ${icc}kA)`);
+
+  // NUEVO: estado resumido de la verificación térmica k²S²≥I²t para el stat general
+  const i2t = proyectoActual.i2tTermicas;
+  const termicaTexto = !i2t
+    ? 'Falta dato de I²t'
+    : document.getElementById('resultadoVerificacionTermica770')?.querySelector('.invalido')
+      ? '⚠️ Revisar sección'
+      : 'OK';
+
+  contenedor.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat"><span class="label">770.14 verificado:</span><span class="value">${marcados}/${idsBooleanos.length}</span></div>
+      <div class="stat"><span class="label">770.15.4 DPS:</span><span class="value">${dps ? 'Instalado' : 'Pendiente'}</span></div>
+      <div class="stat"><span class="label">770.15.5 Sobretensión perm.:</span><span class="value">${releSobre ? 'Instalado' : 'Pendiente'}</span></div>
+      <div class="stat"><span class="label">770.15 Poder de corte (PdCcc≥I''k):</span><span class="value">${pdcTexto}</span></div>
+      <div class="stat"><span class="label">770.15 Verif. térmica (k²S²≥I²t):</span><span class="value">${termicaTexto}</span></div>
+    </div>
+    <p style="opacity:0.75; font-size:12px; margin-top:10px; margin-bottom:0;">
+      Checklist orientativo de cumplimiento de la Sección 770. No reemplaza la verificación
+      final por un instalador electricista matriculado conforme a la edición vigente de la AEA 90364.
+    </p>
+  `;
+}
+
+function actualizarChecklist770() {
+  actualizarGradoElectrificacion();
+  evaluarResistenciaTierra();
+  actualizarResumenAuto77015();
+  evaluarVerificacionTermica770(); // NUEVO: k²S² ≥ I²t junto al resto de 770.15
+  actualizarResumenPuntosUtilizacion770(); // NUEVO: refresca el resumen de 770.7.III junto con el resto
+  calcularEstadoGeneralChecklist770();
+  guardarChecklist770();
+}
+
+function reiniciarChecklist770() {
+  if (!confirm('¿Reiniciar el checklist de la Sección 770? Esta acción no se puede deshacer.')) return;
+  CAMPOS_CHECKLIST_770.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = false;
+    else if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+  });
+  try {
+    localStorage.removeItem(CHECKLIST_770_KEY);
+  } catch (err) {
+    console.warn('No se pudo reiniciar el checklist 770:', err);
+  }
+  actualizarChecklist770();
+}
+
+function initChecklist770() {
+  cargarChecklist770();
+  actualizarChecklist770();
+
+  const btnActualizar = document.getElementById('btnActualizarChecklist770');
+  if (btnActualizar) btnActualizar.addEventListener('click', actualizarChecklist770);
+
+  const btnReiniciar = document.getElementById('btnReiniciarChecklist770');
+  if (btnReiniciar) btnReiniciar.addEventListener('click', reiniciarChecklist770);
+
+  const inputResistencia = document.getElementById('inputResistenciaTierra');
+  if (inputResistencia) {
+    inputResistencia.addEventListener('input', () => {
+      evaluarResistenciaTierra();
+      guardarChecklist770();
+    });
+  }
+
+  const inputCubierta = document.getElementById('inputSupCubierta');
+  const inputSemicubierta = document.getElementById('inputSupSemicubierta');
+  [inputCubierta, inputSemicubierta].forEach(el => {
+    if (!el) return;
+    el.addEventListener('input', () => {
+      actualizarGradoElectrificacion();
+      guardarChecklist770();
+    });
+  });
+
+  // NUEVO: inicialización del módulo 770.7.III (puntos mínimos de
+  // utilización por ambiente). Independiente del resto del checklist.
+  cargarAmbientes770();
+  renderAmbientes770();
+  const formAmbiente770 = document.getElementById('formAmbiente770');
+  if (formAmbiente770) formAmbiente770.addEventListener('submit', agregarAmbiente770);
+  const tipoAmbienteSel770 = document.getElementById('tipoAmbiente770');
+  if (tipoAmbienteSel770) {
+    tipoAmbienteSel770.addEventListener('change', actualizarCamposAmbiente770);
+    actualizarCamposAmbiente770();
+  }
+
+  CAMPOS_CHECKLIST_770.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el === inputResistencia || el === inputCubierta || el === inputSemicubierta) return;
+    el.addEventListener('change', () => {
+      guardarChecklist770();
+      calcularEstadoGeneralChecklist770();
+    });
+  });
+
+  // Observa la tabla de circuitos ya existente para refrescar 770.7 y
+  // 770.15.1-3 automáticamente cuando se agrega/elimina un circuito, sin
+  // tener que tocar ni envolver las funciones originales
+  // agregarCircuito()/renderTablaCircuitos().
+  const tbody = document.querySelector('#circuitsTable tbody');
+  if (tbody && window.MutationObserver) {
+    const observer = new MutationObserver(() => {
+      actualizarGradoElectrificacion();
+      actualizarResumenAuto77015();
+      evaluarVerificacionTermica770(); // NUEVO: recalcula también al agregar/eliminar circuitos
+    });
+    observer.observe(tbody, { childList: true });
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      initChecklist770();
+    } catch (err) {
+      console.error('Error al iniciar el checklist 770:', err);
+    }
+  });
+} else {
+  try {
+    initChecklist770();
+  } catch (err) {
+    console.error('Error al iniciar el checklist 770:', err);
   }
 }
