@@ -207,6 +207,36 @@ const MINIMOS_AEA = {
   'Calentador de agua': { mm2: 4, disyuntor: 25 }
 };
 
+// NUEVO (bug de validación detectado en revisión): la Guía AEA 770 fija un
+// TECHO máximo de corriente/térmica para los circuitos de uso general, que
+// es distinto del PISO mínimo de MINIMOS_AEA:
+//   - IUG (Iluminación):              techo 16A (pág.22-23)
+//   - TUG (Tomacorriente):            techo 20A, fijo — no depende de la
+//                                      potencia declarada (pág.22-23)
+//   - TUE (Tomacorriente Especial):   techo 32A (pág.22-23)
+// Antes esto solo estaba documentado en un comentario (ver más abajo) bajo
+// el supuesto de que "ya está garantizado por separado" porque
+// encontrarConductorConAgrupamiento() nunca elige una térmica mayor a la
+// que admite el cable. Ese supuesto es FALSO en cuanto la corriente de
+// diseño (Ib) supera lo que cubre la tabla de agrupamiento de la guía
+// (hasta 6mm²/32A): en ese caso la función cae al criterio de "1 circuito
+// por caño" de CONDUCTORES_AEA y sigue subiendo de sección sin límite,
+// devolviendo por ejemplo un "Tomacorriente" de 10mm²/50A — un circuito que
+// no existe en la norma, porque un TUG jamás debería superar 20A (las
+// bocas de uso general son de 10A por ficha; una carga tan alta pertenece
+// a un circuito TUE, a un circuito dedicado, o hay que repartirla en varios
+// TUG). Sin este techo, la app terminaba "resolviendo" con cable y térmica
+// una clasificación de circuito que en los hechos es inválida.
+const TECHOS_AEA = {
+  'Iluminación': 16,
+  'Tomacorriente': 20,
+  'Tomacorriente Especial (TUE)': 32
+  // El resto (Cocina/Comedor, Lavarropas, Aire Acondicionado, Calefactor,
+  // Calentador de agua, Otro) son circuitos dedicados a un consumo
+  // específico: la guía no les fija un techo de corriente, se dimensionan
+  // según la carga real declarada.
+};
+
 // CORREGIDO: resistividad del cobre a temperatura de SERVICIO (~70-90°C
 // según aislación), no en frío a 20°C (0.0175). Usar el valor en frío
 // subestima la caída de tensión real en la instalación terminada en un
@@ -423,6 +453,9 @@ function evaluarPoderDeCorte() {
         provisto por la empresa distribuidora, no se puede verificar que las térmicas elegidas
         soporten el cortocircuito (AEA 770, 770.15, pág. 45: PdCcc ≥ I''k).
       </span>`;
+    proyectoActual.estado770 = proyectoActual.estado770 || {};
+    proyectoActual.estado770.poderCorteOk = null;
+    proyectoActual.estado770.poderCorteFaltaDato = true;
     return;
   }
 
@@ -432,6 +465,11 @@ function evaluarPoderDeCorte() {
       PdCcc (${pdc} kA) ${cumple ? '≥' : '<'} I''k (${icc} kA) —
       ${cumple ? '✓ el poder de corte declarado cubre la Icc informada' : '⚠️ el poder de corte declarado NO alcanza: elegir térmicas de mayor PdCcc'}
     </span>`;
+
+  // NUEVO: estado guardado para el semáforo consolidado.
+  proyectoActual.estado770 = proyectoActual.estado770 || {};
+  proyectoActual.estado770.poderCorteOk = cumple;
+  proyectoActual.estado770.poderCorteFaltaDato = false;
 }
 
 function renderResumenTablero() {
@@ -530,6 +568,27 @@ function agregarCircuito(event) {
   const corriente = calcularCorriente(potenciaDPMS, proyectoActual.tipoSistema, cosPhiCircuito);
   const circuitosPorCano = Number(document.getElementById('circuitosPorCano')?.value) || 1;
 
+  // NUEVO: bloquea circuitos IUG/TUG/TUE cuya corriente de diseño supera el
+  // techo normativo del tipo (ver TECHOS_AEA). Antes la app permitía, por
+  // ejemplo, un "Tomacorriente" de 47,85A y le calzaba un cable/térmica de
+  // 10mm²/50A — un circuito que no existe en la norma (TUG topea en 20A).
+  // Se corta ACÁ, antes de dimensionar nada, en vez de dejar pasar un
+  // circuito mal clasificado con un cable "que le entra".
+  const techo = TECHOS_AEA[tipoCircuito];
+  if (techo && corriente > techo) {
+    alert(
+      `⚠️ Corriente de diseño demasiado alta para este tipo de circuito.\n\n` +
+      `Ib = ${corriente} A, pero "${tipoCircuito}" tiene un techo normativo de ${techo} A (AEA 770).\n\n` +
+      `No se agregó el circuito. Opciones:\n` +
+      `• Repartir esta carga en más de un circuito de este tipo.\n` +
+      (tipoCircuito === 'Tomacorriente'
+        ? `• Si es un consumo puntual de un solo artefacto, cargarlo como "Tomacorriente Especial (TUE)" (techo 32A).\n`
+        : '') +
+      `• Si es un artefacto fijo de alto consumo, cargarlo como circuito dedicado ("Cocina/Comedor", "Aire Acondicionado", "Otro", etc.).`
+    );
+    return;
+  }
+
   // El mínimo AEA por tipo de circuito (tomas, cocina, lavarropas, etc.)
   // se exige DESDE el cálculo del conductor, no después: así, si el
   // mínimo normativo obliga a una térmica que el cable no soportaría ya
@@ -559,6 +618,20 @@ function agregarCircuito(event) {
     corriente,
     conductor: conductor.mm2,
     disyuntor: conductor.disyuntor,
+    // CORREGIDO (bug de coordinación detectado en revisión): se guarda el Iz
+    // (corriente admisible del cable) que efectivamente se usó al ELEGIR
+    // este conductor/térmica, en vez de tener que volver a buscarlo después
+    // por sección (mm2) solamente. La tabla CONDUCTORES_AEA tiene más de
+    // una fila para la misma sección con distinto Iz/térmica (ej. 2,5mm²
+    // -> 16A y 20A; 10mm² -> 50A y 63A, según el techo del tipo de
+    // circuito). Antes, actualizarResumenAuto77015() recalculaba el Iz con
+    // obtenerIzAgrupado(mm2), que con esas secciones duplicadas devolvía
+    // SIEMPRE la primera fila (el Iz más bajo) sin importar cuál se usó de
+    // verdad — por ejemplo, un circuito de 10mm²/63A terminaba comparado
+    // contra un Iz de 50A y se marcaba "no cumple coordinación" (In=63 >
+    // Iz=50) aunque el conductor elegido fuera correcto. Ahora se guarda el
+    // Iz real acá, en el momento en que se conoce sin ambigüedad.
+    iz: conductor.amperios,
     seccionPE,
     caidaV,
     caidaPorcentaje,
@@ -609,6 +682,7 @@ function renderTablaCircuitos() {
   if (proyectoActual.circuitos.length === 0) {
     emptyState.style.display = 'block';
     resumenBox.innerHTML = '<p style="text-align:center;opacity:0.7">Agrega circuitos para ver el resumen</p>';
+    calcularSemaforoGeneral(); // NUEVO: limpia el semáforo si no quedan circuitos
     return;
   }
   
@@ -695,6 +769,11 @@ function renderResumenTotal() {
       </div>
     </div>
   `;
+
+  // NUEVO: cada vez que cambia la lista de circuitos (agregar/borrar), se
+  // refresca también el semáforo consolidado, aunque no haya cambiado
+  // ningún dato de la sección 770 (Icc, I²t, etc.).
+  calcularSemaforoGeneral();
 }
 
 // NUEVO: arma el encabezado del informe (fecha + resumen del sistema
@@ -807,6 +886,24 @@ function configurarSistema() {
   renderResumenTablero();
   renderTablaCircuitos();
   evaluarVerificacionTermica770(); // NUEVO: refresca la verificación térmica con los datos recién configurados
+  // CORREGIDO (bug de sincronización detectado en revisión): antes, la
+  // coordinación cable-protección (estado770.coordinacionOk) solo se
+  // actualizaba como efecto secundario del MutationObserver que observa
+  // la tabla de circuitos (dispara actualizarResumenAuto77015() cuando
+  // renderTablaCircuitos(), llamado arriba, reconstruye el <tbody>). Esa
+  // llamada ocurre en un microtask que corre DESPUÉS de que esta función
+  // termina, así que el calcularSemaforoGeneral() de más abajo podía leer
+  // un estado770.coordinacionOk todavía viejo (o undefined en la primera
+  // configuración con circuitos ya cargados desde localStorage), mostrando
+  // el semáforo con la información de coordinación desactualizada hasta el
+  // próximo cambio en la tabla de circuitos o click en "Actualizar". Ahora
+  // se llama explícitamente ANTES del semáforo, sin depender del efecto
+  // secundario del observer.
+  actualizarResumenAuto77015();
+  // NUEVO: se recalcula el semáforo DESPUÉS de evaluarVerificacionTermica770()
+  // y actualizarResumenAuto77015(), para que use el estado770 recién actualizado
+  // (térmica, coordinación) y no uno desfasado de la configuración anterior.
+  calcularSemaforoGeneral();
   alert('✓ Sistema configurado correctamente');
 }
 
@@ -1066,11 +1163,23 @@ function determinarGradoElectrificacion(superficieLimite) {
 }
 
 // Tabla 770.7.II - Resumen de los números mínimos de circuitos por grado.
+// CORREGIDO (bug de lógica detectado en revisión): cada combinación válida
+// de esta tabla exige un mínimo de IUG y de TUG por separado (ninguna
+// combinación admite 0 de alguno de los dos), pero antes solo se comparaba
+// la SUMA (iug+tug) contra "total". Eso dejaba pasar como "cumple" un caso
+// como 3 circuitos "Tomacorriente" y 0 "Iluminación" en grado Medio: la suma
+// (3) alcanza el total exigido, pero ninguna combinación real de la norma
+// admite 0 IUG. Se agregan minIUG/minTUG (el mínimo de cada tipo que
+// aparece en TODAS las combinaciones listadas) para detectar ese caso.
+// "Superior" exige además 1 circuito "de libre elección" que esta app no
+// modela como tipo propio; minIUG/minTUG cubren el piso de IUG/TUG, pero
+// igual hace falta un circuito adicional (de cualquier tipo) para llegar
+// al total de 6 — eso lo sigue cubriendo la comparación de "total".
 const CIRCUITOS_MINIMOS_770_7 = {
-  'Mínimo':   { total: 2, texto: '1 circuito de Iluminación de uso general (IUG) + 1 de Tomacorrientes de uso general (TUG)' },
-  'Medio':    { total: 3, texto: '3 circuitos de uso general: 2 IUG + 1 TUG, o bien 1 IUG + 2 TUG' },
-  'Elevado':  { total: 5, texto: '5 circuitos de uso general: 2 IUG + 3 TUG, o bien 3 IUG + 2 TUG' },
-  'Superior': { total: 6, texto: '6 circuitos: 2 IUG + 3 TUG + 1 de libre elección, o bien 3 IUG + 2 TUG + 1 de libre elección' }
+  'Mínimo':   { total: 2, minIUG: 1, minTUG: 1, texto: '1 circuito de Iluminación de uso general (IUG) + 1 de Tomacorrientes de uso general (TUG)' },
+  'Medio':    { total: 3, minIUG: 1, minTUG: 1, texto: '3 circuitos de uso general: 2 IUG + 1 TUG, o bien 1 IUG + 2 TUG' },
+  'Elevado':  { total: 5, minIUG: 2, minTUG: 2, texto: '5 circuitos de uso general: 2 IUG + 3 TUG, o bien 3 IUG + 2 TUG' },
+  'Superior': { total: 6, minIUG: 2, minTUG: 2, texto: '6 circuitos: 2 IUG + 3 TUG + 1 de libre elección, o bien 3 IUG + 2 TUG + 1 de libre elección' }
 };
 
 // QUITADO tras revisar el texto completo de la Guía AEA 770: este
@@ -1328,7 +1437,21 @@ function actualizarGradoElectrificacion() {
   const iug = proyectoActual.circuitos.filter(c => c.tipoCircuito === 'Iluminación').length;
   const tug = proyectoActual.circuitos.filter(c => c.tipoCircuito === 'Tomacorriente').length;
   const totalGeneral = iug + tug;
-  const cumpleMinimo = totalGeneral >= minimos.total;
+  // CORREGIDO: además del total, se exige el mínimo de CADA tipo (ver
+  // comentario en CIRCUITOS_MINIMOS_770_7). Antes solo se chequeaba la suma.
+  const cumpleTotal = totalGeneral >= minimos.total;
+  const cumpleIUG = iug >= minimos.minIUG;
+  const cumpleTUG = tug >= minimos.minTUG;
+  const cumpleMinimo = cumpleTotal && cumpleIUG && cumpleTUG;
+
+  let detalleFaltante = '';
+  if (!cumpleMinimo) {
+    const faltantes = [];
+    if (!cumpleIUG) faltantes.push(`al menos ${minimos.minIUG} de Iluminación (IUG)`);
+    if (!cumpleTUG) faltantes.push(`al menos ${minimos.minTUG} de Tomacorriente (TUG)`);
+    if (cumpleIUG && cumpleTUG && !cumpleTotal) faltantes.push(`completar el total de ${minimos.total} circuitos de uso general`);
+    detalleFaltante = ` — falta ${faltantes.join(' y ')}`;
+  }
 
   contenedor.innerHTML = `
     <div class="stats-grid">
@@ -1338,7 +1461,7 @@ function actualizarGradoElectrificacion() {
     <p style="margin:10px 0 4px 0;"><strong>Circuitos mínimos exigidos (770.7.5):</strong> ${minimos.texto}</p>
     <p class="${cumpleMinimo ? 'valido' : 'invalido'}" style="margin:4px 0;">
       Circuitos de uso general ya cargados arriba: ${totalGeneral} (IUG: ${iug} · TUG: ${tug})
-      — ${cumpleMinimo ? '✓ cumple la cantidad mínima exigida' : `⚠️ faltan circuitos para llegar al mínimo de ${minimos.total}`}
+      — ${cumpleMinimo ? '✓ cumple la cantidad mínima exigida' : `⚠️ no cumple el mínimo exigido${detalleFaltante}`}
     </p>
     <p style="opacity:0.7; font-size:12px; margin-top:6px;">
       Nota: la cantidad y ubicación de los puntos mínimos de utilización por ambiente (bocas de
@@ -1377,6 +1500,9 @@ function evaluarVerificacionTermica770() {
         curva del fabricante a la Icc declarada. Sin ese valor no se puede verificar
         k²S² ≥ I²t (AEA 770, 770.15, pág. 45).
       </span>`;
+    proyectoActual.estado770 = proyectoActual.estado770 || {};
+    proyectoActual.estado770.termicaOk = null; // null = no evaluable (falta dato), distinto de false = incumple
+    proyectoActual.estado770.termicaFaltaDato = true;
     return;
   }
 
@@ -1441,6 +1567,13 @@ function evaluarVerificacionTermica770() {
     resumen += '<div style="opacity:0.7; font-size:12px; margin-top:4px;">Hay conductores fuera de la tabla simplificada de esta app; verificarlos manualmente.</div>';
   }
 
+  // NUEVO: se guarda el resultado como estado (no se vuelve a leer del DOM
+  // desde otras funciones), para que el semáforo consolidado no dependa
+  // del orden en que se llaman las funciones de renderizado.
+  proyectoActual.estado770 = proyectoActual.estado770 || {};
+  proyectoActual.estado770.termicaOk = !hayProblemas;
+  proyectoActual.estado770.termicaFaltaDato = false;
+
   contenedor.innerHTML = items + resumen + `
     <p style="opacity:0.7; font-size:12px; margin-top:8px;">
       El valor de I²t debe corresponder a la curva del fabricante A LA MISMA Icc declarada
@@ -1464,7 +1597,16 @@ function actualizarResumenAuto77015() {
 
   proyectoActual.circuitos.forEach(c => {
     const fueraDeTabla = c.conductor === '>70';
-    const iz = fueraDeTabla ? null : obtenerIzAgrupado(c.conductor, c.circuitosPorCano || 1);
+    // CORREGIDO: se usa el Iz guardado en el propio circuito (c.iz), que es
+    // el que realmente se usó al elegir el conductor/térmica, en vez de
+    // volver a derivarlo por sección con obtenerIzAgrupado(mm2) — esa
+    // función no distingue entre las dos filas que existen para una misma
+    // sección con distinto Iz/técnica (ej. 2,5mm² 16A/20A, 10mm² 50A/63A) y
+    // siempre devolvía la primera (la de menor Iz), dando falsos "no
+    // cumple" en circuitos bien dimensionados. c.iz puede faltar en
+    // proyectos guardados en localStorage ANTES de este fix: para esos
+    // casos se mantiene obtenerIzAgrupado() como respaldo, igual que antes.
+    const iz = fueraDeTabla ? null : (c.iz ?? obtenerIzAgrupado(c.conductor, c.circuitosPorCano || 1));
     const coordinaOk = !fueraDeTabla && iz !== null && c.corriente <= c.disyuntor && c.disyuntor <= iz;
     if (!coordinaOk) hayProblemas = true;
     items += `
@@ -1479,6 +1621,10 @@ function actualizarResumenAuto77015() {
   contenedor.innerHTML = items + (hayProblemas
     ? '<div class="invalido" style="margin-top:8px;">⚠️ Hay circuitos que no cumplen la coordinación cable-protección exigida por 770.15.2/770.15.3.</div>'
     : '<div class="valido" style="margin-top:8px;">✓ Todos los circuitos cumplen la coordinación cable-protección (770.15.1 a 770.15.3).</div>');
+
+  // NUEVO: estado guardado para el semáforo consolidado.
+  proyectoActual.estado770 = proyectoActual.estado770 || {};
+  proyectoActual.estado770.coordinacionOk = !hayProblemas;
 }
 
 function calcularEstadoGeneralChecklist770() {
@@ -1500,13 +1646,14 @@ function calcularEstadoGeneralChecklist770() {
     ? 'Falta dato de Icc'
     : (pdc >= icc ? `OK (${pdc}kA ≥ ${icc}kA)` : `⚠️ Insuficiente (${pdc}kA < ${icc}kA)`);
 
-  // NUEVO: estado resumido de la verificación térmica k²S²≥I²t para el stat general
+  // NUEVO: estado resumido de la verificación térmica k²S²≥I²t para el stat general.
+  // Se lee de proyectoActual.estado770 (calculado por evaluarVerificacionTermica770),
+  // no del DOM, para que no dependa del orden de renderizado.
   const i2t = proyectoActual.i2tTermicas;
+  const termicaOkGuardado = proyectoActual.estado770?.termicaOk;
   const termicaTexto = !i2t
     ? 'Falta dato de I²t'
-    : document.getElementById('resultadoVerificacionTermica770')?.querySelector('.invalido')
-      ? '⚠️ Revisar sección'
-      : 'OK';
+    : (termicaOkGuardado === false ? '⚠️ Revisar sección' : 'OK');
 
   contenedor.innerHTML = `
     <div class="stats-grid">
@@ -1530,7 +1677,92 @@ function actualizarChecklist770() {
   evaluarVerificacionTermica770(); // NUEVO: k²S² ≥ I²t junto al resto de 770.15
   actualizarResumenPuntosUtilizacion770(); // NUEVO: refresca el resumen de 770.7.III junto con el resto
   calcularEstadoGeneralChecklist770();
+  calcularSemaforoGeneral(); // NUEVO: semáforo consolidado de todo el proyecto
   guardarChecklist770();
+}
+
+// NUEVO: semáforo consolidado. Solo LEE resultados ya calculados por las
+// funciones de verificación (no recalcula nada), para no duplicar lógica
+// ni arriesgar que el semáforo diga algo distinto de las secciones de
+// detalle. Estados posibles por chequeo: true (cumple), false (no cumple),
+// null/undefined (no evaluable todavía por falta de datos o de circuitos).
+function calcularSemaforoGeneral() {
+  const contenedor = document.getElementById('semaforoGeneral');
+  if (!contenedor) return;
+
+  if (!proyectoActual.tipoSistema || proyectoActual.circuitos.length === 0) {
+    contenedor.innerHTML = '';
+    contenedor.className = 'semaforo-box';
+    return;
+  }
+
+  const estado = proyectoActual.estado770 || {};
+
+  // Caída de tensión: se recalcula acá el mismo resumen que usa la tabla de
+  // circuitos (circuito.valido), sin volver a calcular ninguna caída.
+  const circuitosFueraTabla = proyectoActual.circuitos.filter(c => c.conductor === '>70').length;
+  const circuitosCaidaExcesiva = proyectoActual.circuitos.filter(c => c.conductor !== '>70' && !c.valido).length;
+  const caidaOk = circuitosFueraTabla === 0 && circuitosCaidaExcesiva === 0;
+
+  // NUEVO: faltaba este chequeo. Es el mismo criterio que ya usa
+  // renderTablaCircuitos() para pintar el ⚠️ junto al calibre (avisoAgrupamiento):
+  // secciones >6mm² agrupadas con más de 1 circuito por caño, para las que
+  // esta app no tiene tabla de agrupamiento y usa el criterio conservador de
+  // 1 circuito por caño — no es un incumplimiento confirmado, sino algo que
+  // hay que verificar aparte, por eso cuenta como "falta dato", no como rojo.
+  const circuitosSinDatosAgrupamiento = proyectoActual.circuitos.filter(c =>
+    c.conductor !== '>70' && c.agrupamientoVerificado === false && (c.circuitosPorCano || 1) > 1
+  ).length;
+
+  // NUEVO: faltaba este chequeo. Mismo criterio que ya usa renderResumenTotal()
+  // para la advertencia "La suma de circuitos supera la potencia contratada" —
+  // sin factor de simultaneidad, comparación directa carga instalada vs.
+  // potencia contratada (conservadora, puede sobrestimar el problema).
+  const totalPotenciaCircuitos = proyectoActual.circuitos.reduce((sum, c) => sum + c.potenciaCircuito, 0);
+  const potenciaOk = !(proyectoActual.potenciaTotal > 0 && totalPotenciaCircuitos > proyectoActual.potenciaTotal);
+
+  const chequeos = [
+    { label: 'Caída de tensión', ok: caidaOk, faltaDato: false },
+    { label: 'Coordinación cable-protección (770.15.1-3)', ok: estado.coordinacionOk, faltaDato: estado.coordinacionOk === undefined },
+    { label: 'Verificación térmica k²S²≥I²t (770.15)', ok: estado.termicaOk, faltaDato: !!estado.termicaFaltaDato },
+    { label: 'Poder de corte PdCcc≥I\'\'k (770.15)', ok: estado.poderCorteOk, faltaDato: !!estado.poderCorteFaltaDato },
+    { label: `Agrupamiento >6mm² sin tabla (${circuitosSinDatosAgrupamiento} circuito(s), verificar manualmente)`, ok: circuitosSinDatosAgrupamiento === 0 ? true : undefined, faltaDato: circuitosSinDatosAgrupamiento > 0 },
+    { label: 'Potencia contratada vs. suma de circuitos', ok: potenciaOk, faltaDato: false },
+  ];
+
+  const conProblema = chequeos.filter(c => c.ok === false);
+  const conFaltante = chequeos.filter(c => c.ok === null || c.ok === undefined || c.faltaDato);
+
+  // CORREGIDO: antes, si había al menos un problema (rojo), el bloque
+  // "else if" siguiente ni se evaluaba y los pendientes de verificar
+  // (amarillo, ej. agrupamiento >6mm² sin tabla) desaparecían del mensaje
+  // por completo aunque existieran. Ahora se arman los dos mensajes por
+  // separado y se combinan, así el semáforo nunca oculta información que
+  // ya tiene calculada.
+  let nivel;
+  let mensaje = '';
+  if (conProblema.length > 0) {
+    nivel = 'rojo';
+    mensaje += `⚠️ ${conProblema.length} verificación(es) sin cumplir: ${conProblema.map(c => c.label).join(', ')}.`;
+  } else if (conFaltante.length > 0) {
+    nivel = 'amarillo';
+  } else {
+    nivel = 'verde';
+    mensaje = '✓ Todas las verificaciones disponibles cumplen la Sección 770.';
+  }
+  if (conFaltante.length > 0 && nivel !== 'verde') {
+    mensaje += `${mensaje ? ' ' : ''}ℹ️ Además, faltan datos o verificación manual para: ${conFaltante.map(c => c.label).join(', ')}.`;
+  }
+
+  contenedor.className = `semaforo-box semaforo-${nivel}`;
+  contenedor.innerHTML = `
+    <div class="semaforo-titulo">Estado general del proyecto</div>
+    <div class="semaforo-mensaje">${mensaje}</div>
+    <p style="opacity:0.75; font-size:12px; margin-top:6px; margin-bottom:0;">
+      Resumen automático de los chequeos de la Sección 770 ya calculados en esta página.
+      No reemplaza la verificación final por un instalador electricista matriculado.
+    </p>
+  `;
 }
 
 function reiniciarChecklist770() {
@@ -1609,6 +1841,12 @@ function initChecklist770() {
       actualizarGradoElectrificacion();
       actualizarResumenAuto77015();
       evaluarVerificacionTermica770(); // NUEVO: recalcula también al agregar/eliminar circuitos
+      // NUEVO: sin esta línea, el semáforo (que ya se dispara antes, de forma
+      // síncrona, desde renderResumenTotal) queda un paso desactualizado:
+      // usaría el estado de coordinación/térmica del circuito ANTERIOR,
+      // porque este observer corre después (como microtask) de que el
+      // semáforo ya se pintó por primera vez.
+      calcularSemaforoGeneral();
     });
     observer.observe(tbody, { childList: true });
   }
