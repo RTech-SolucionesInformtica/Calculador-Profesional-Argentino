@@ -90,53 +90,116 @@ const SERIE_DISYUNTORES = [10, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125, 160, 20
 // cable-térmica. Ahora, si no hay ninguna térmica que cumpla Ib≤In≤maxAdmitido,
 // se devuelve null para que el llamador pruebe con la sección de cable
 // siguiente en vez de aceptar una térmica subdimensionada.
-function elegirDisyuntorComercial(corriente, maxAdmitido) {
-  const candidatos = SERIE_DISYUNTORES.filter(d => d >= corriente && d <= maxAdmitido);
+function elegirDisyuntorComercial(corriente, maxAdmitido, minimoDisyuntor = 0) {
+  const candidatos = SERIE_DISYUNTORES.filter(d => d >= corriente && d >= minimoDisyuntor && d <= maxAdmitido);
   return candidatos.length > 0 ? Math.min(...candidatos) : null;
 }
 
-// Devuelve el conductor (mm², disyuntor) más chico que admite la
-// "corriente" dada, respetando el calibre máximo de protección para la
-// cantidad de "circuitosPorCano" indicada (1, 2 o 3). Para secciones no
-// cubiertas por CALIBRE_MAX_AGRUPAMIENTO_770 (>6mm²) se usa el criterio
-// de 1 circuito por caño de CONDUCTORES_AEA, ya que la guía no da esos
-// valores agrupados.
-function encontrarConductorConAgrupamiento(corriente, circuitosPorCano = 1) {
+// CORREGIDO (bug de seguridad detectado en revisión): antes esta función
+// elegía el conductor SOLO en base a la corriente de diseño (Ib) y recién
+// después, en aplicarMinimoAEA(), se le imponía por separado el mínimo
+// AEA del tipo de circuito con un simple Math.max(mm2, disyuntor) — sin
+// volver a comprobar que esa térmica "mínima" siguiera siendo válida
+// para el cable ya agrupado con otros circuitos en el mismo caño.
+// Ejemplo real que esto dejaba pasar: un circuito Tomacorriente (TUG,
+// mínimo AEA 2,5mm²/16A) con corriente de diseño baja y 3 circuitos
+// compartiendo el caño: el cable quedaba en 2,5mm² con una térmica de
+// 16A, pero a 2,5mm² con 3 circuitos agrupados la tabla de la pág.40
+// solo admite 13A — la térmica de 16A no protege ese cable a tiempo
+// (viola 770.15.2/770.15.3), y sin embargo el checklist mostraba "cumple".
+//
+// Ahora el mínimo AEA del tipo de circuito (minimoAEA) se exige DESDE EL
+// PRINCIPIO de la búsqueda, sección por sección: se parte de la sección
+// mínima normativa del circuito (no de 1,5mm²) y se sube de sección hasta
+// encontrar una térmica comercial que cumpla las tres condiciones a la
+// vez: Ib ≤ In, In ≥ mínimo AEA del tipo de circuito, e In ≤ Iz del cable
+// YA AGRUPADO con la cantidad de circuitos por caño indicada. Si ninguna
+// sección de 1,5 a 6mm² lo logra, se sigue probando con las secciones
+// mayores (criterio de 1 circuito por caño, única data disponible en la
+// guía para esas secciones). Si ni así se encuentra una combinación
+// segura, se devuelve un conductor "fuera de tabla" en vez de forzar una
+// térmica que no protege al cable.
+function encontrarConductorConAgrupamiento(corriente, circuitosPorCano = 1, minimoAEA = null) {
+  const minMm2 = minimoAEA ? minimoAEA.mm2 : 0;
+  const minDisyuntor = minimoAEA ? minimoAEA.disyuntor : 0;
   const secciones = [1.5, 2.5, 4, 6];
+
   for (const mm2 of secciones) {
+    if (mm2 < minMm2) continue; // no baja de la sección mínima exigida por el tipo de circuito
     const tabla = CALIBRE_MAX_AGRUPAMIENTO_770[mm2];
     const maxAdmitido = tabla[circuitosPorCano] ?? tabla[3]; // >3 circuitos: usar el más restrictivo disponible como piso conservador
-    if (corriente <= maxAdmitido) {
-      const disyuntor = elegirDisyuntorComercial(corriente, maxAdmitido);
-      // Si esta sección de cable no tiene ninguna térmica comercial que
-      // respete Ib≤In≤maxAdmitido, se prueba con la sección siguiente
-      // (más grande) en vez de aceptar una térmica subdimensionada.
-      if (disyuntor !== null) {
-        return { mm2, disyuntor, amperios: maxAdmitido };
-      }
+    const disyuntor = elegirDisyuntorComercial(corriente, maxAdmitido, minDisyuntor);
+    // Si esta sección de cable no tiene ninguna térmica comercial que
+    // respete Ib≤In≤maxAdmitido Y además In≥mínimo AEA, se prueba con la
+    // sección siguiente (más grande) en vez de aceptar una térmica
+    // subdimensionada o una que exceda el Iz agrupado.
+    if (disyuntor !== null) {
+      return { mm2, disyuntor, amperios: maxAdmitido, agrupamientoVerificado: true };
     }
   }
+
   // Fuera del rango cubierto por la tabla de agrupamiento (>6mm²), o
-  // ninguna sección de la tabla tenía una térmica válida: cae al
-  // criterio de 1 circuito por caño ya existente, con nota de que el
-  // agrupamiento no está verificado para esta sección.
-  return encontrarConductor(corriente);
+  // ninguna sección de esa tabla tenía una combinación válida: se sigue
+  // subiendo de sección con el criterio de 1 circuito por caño de
+  // CONDUCTORES_AEA (única data disponible para secciones mayores),
+  // exigiendo igual el mínimo AEA del tipo de circuito.
+  for (const fila of CONDUCTORES_AEA) {
+    if (fila.mm2 <= 6 || fila.mm2 < minMm2) continue;
+    const disyuntor = elegirDisyuntorComercial(corriente, fila.amperios, minDisyuntor);
+    if (disyuntor !== null) {
+      return { mm2: fila.mm2, disyuntor, amperios: fila.amperios, agrupamientoVerificado: false };
+    }
+  }
+
+  // Ninguna sección normalizada admite a la vez la corriente de diseño,
+  // el mínimo AEA del tipo de circuito y la cantidad de circuitos
+  // agrupados indicada: se marca como fuera de tabla (a verificar por un
+  // profesional) en vez de devolver una combinación insegura.
+  return { mm2: '>70', disyuntor: '>200', amperios: Infinity, agrupamientoVerificado: false };
 }
 
-// NUEVO: secciones mínimas exigidas por la AEA 90364 según tipo de
-// circuito, independientemente de la corriente que dé el cálculo.
-// TUG (tomas de uso general): el mínimo depende del tipo de
-// tomacorriente instalado (AEA 90364-7-770):
-//   - Tomas comunes 2P+T IRAM 2071 (10A por boca) -> disyuntor máx. 16A
-//   - Tomas industriales IRAM IEC 60309 (16A por boca) -> disyuntor máx. 20A
-// TUE (circuitos especiales - cocina, lavarropas, calefacción, etc.): mín. 4mm²/25A.
-// Verificar siempre contra la tabla AEA vigente según el método de instalación real.
+// CORREGIDO (revisión contra el texto completo de la Guía AEA 770,
+// "Clasificación de los circuitos", pág. 22-23): la versión anterior
+// modelaba un único circuito "Tomacorriente" con dos variantes de ficha
+// (10A común -> 16A / 16A industrial -> 20A). Eso estaba mal: 16A no es
+// un valor de TUG en ningún caso (es el calibre máximo de IUG), y TUG
+// y TUE son dos TIPOS DE CIRCUITO distintos, no una misma categoría con
+// dos fichas posibles. La tabla real es:
+//   - IUG (Iluminación de Uso General): calibre máx. 16A, sección mín. 1,5mm².
+//   - TUG (Tomacorrientes de Uso General): SIEMPRE con fichas 2P+T IRAM
+//     2071 de 10A por definición; calibre máx. 20A (fijo, no depende de
+//     ninguna ficha), sección mín. 2,5mm².
+//   - TUE (Tomacorrientes de Uso Especial: consumos unitarios de 10 a 20A,
+//     ej. aire acondicionado en un dormitorio grande, fichas 2P+T IRAM 2071
+//     de 20A o IRAM-IEC 60309 de 16A): calibre máx. 32A, sección mín.
+//     2,5mm², corriente máxima admitida por boca = 20A.
+// Se agrega TUE como tipo de circuito propio (no como sub-opción de
+// "Tomacorriente"), ya que así lo trata la norma.
+// IMPORTANTE: estos valores son el PISO mínimo (sección normativa +
+// disyuntor de piso, tomado del ejemplo numérico resuelto de la propia
+// guía). NO son el techo/máximo admitido por circuito: ese techo
+// (16A para IUG, 20A para TUG, 32A para TUE) ya está garantizado por
+// separado, porque encontrarConductorConAgrupamiento() nunca elige un
+// disyuntor mayor al que admite la sección de cable (Iz, Tabla pág.40).
+// - IUG: sección mín. 1,5mm² (770). Piso de disyuntor 10A, igual al
+//   ejemplo de la guía (pág.31: Ib=2,73A -> In=10A). El techo de 16A
+//   solo se alcanza si la corriente de diseño lo exige.
+// - Tomacorriente = TUG: sección mín. 2,5mm² (770). Piso de disyuntor
+//   16A, igual al ejemplo de la guía (pág.31: ambos TUG quedan con
+//   In=16A pese a que Ib=10A). El techo normativo es 20A.
+// - Tomacorriente Especial (TUE): consumos unitarios de 10 a 20A por
+//   boca (ej. AC en dormitorio >36m², pág.11), sección mín. 2,5mm²,
+//   techo normativo 32A. La guía no da un ejemplo numérico resuelto de
+//   TUE, así que el piso de 20A es un criterio conservador propio,
+//   no un valor citado textualmente: VERIFICAR caso por caso, en
+//   particular que el cable elegido admita (Iz) el disyuntor final
+//   (con 2,5mm² el techo de Iz es 20A; para llegar a 32A hace falta
+//   subir a 6mm², según la Tabla "calibre máximo de las protecciones
+//   para los cables", pág.40).
 const MINIMOS_AEA = {
   'Iluminación': { mm2: 1.5, disyuntor: 10 },
-  'Tomacorriente': {
-    '10A': { mm2: 2.5, disyuntor: 16 },
-    '16A': { mm2: 2.5, disyuntor: 20 }
-  },
+  'Tomacorriente': { mm2: 2.5, disyuntor: 16 },
+  'Tomacorriente Especial (TUE)': { mm2: 2.5, disyuntor: 20 },
   'Cocina/Comedor': { mm2: 4, disyuntor: 25 },
   'Lavarropas': { mm2: 4, disyuntor: 25 },
   'Aire Acondicionado': { mm2: 4, disyuntor: 25 },
@@ -164,6 +227,7 @@ const COS_PHI_TIPOS = {
   'Calefactor': 0.95,
   'Iluminación': 0.95,
   'Tomacorriente': 0.95,
+  'Tomacorriente Especial (TUE)': 0.9,
   'Otro': 0.95
 };
 
@@ -211,8 +275,9 @@ function calcularSeccionPE(faseMm2) {
 // por defecto para todo lo que no fuera iluminación, lo cual permitía
 // una caída excesiva en tomacorrientes comunes.
 const CAIDA_MAX_TIPOS = {
-  'Aire Acondicionado': 5, // circuito de uso específico que alimenta un motor (compresor)
-  'Lavarropas': 5          // ídem, motor de lavado/centrifugado
+  'Aire Acondicionado': 5,            // circuito de uso específico que alimenta un motor (compresor)
+  'Lavarropas': 5,                    // ídem, motor de lavado/centrifugado
+  'Tomacorriente Especial (TUE)': 5   // TUE suele alimentar un único artefacto de mayor consumo unitario (ej. AC), mismo criterio
   // todo el resto (iluminación, tomacorriente, cocina, calefactor,
   // calentador de agua) es 3% por defecto según 771.13.b.1
 };
@@ -265,24 +330,14 @@ function encontrarConductor(corriente) {
   return { mm2: '>70', disyuntor: '>200', amperios: Infinity };
 }
 
-// NUEVO: fuerza la sección/térmica mínima según el tipo de circuito
-// (AEA exige mínimos por tipo, sin importar cuán baja sea la potencia declarada).
-// Para 'Tomacorriente', el mínimo depende además del tipo de toma
-// (10A común o 16A industrial), por eso ahí MINIMOS_AEA guarda un
-// objeto anidado en vez de { mm2, disyuntor } directo.
-function aplicarMinimoAEA(tipoCircuito, conductorCalculado, tipoTomacorriente = '10A') {
-  let minimo = MINIMOS_AEA[tipoCircuito];
-  if (tipoCircuito === 'Tomacorriente' && minimo) {
-    minimo = minimo[tipoTomacorriente] || minimo['10A'];
-  }
-  if (!minimo || conductorCalculado.mm2 === '>70') return conductorCalculado;
-
-  return {
-    mm2: Math.max(conductorCalculado.mm2, minimo.mm2),
-    disyuntor: Math.max(conductorCalculado.disyuntor, minimo.disyuntor),
-    amperios: Math.max(conductorCalculado.amperios, minimo.disyuntor)
-  };
-}
+// QUITADO (bug de seguridad): esta función forzaba el mínimo AEA con un
+// simple Math.max(mm2, disyuntor) DESPUÉS de haber elegido el conductor
+// por corriente, sin volver a verificar que la térmica resultante
+// siguiera siendo válida para el cable ya agrupado con otros circuitos
+// en el mismo caño. Ver el comentario en encontrarConductorConAgrupamiento():
+// ahora el mínimo AEA se exige desde el principio de esa búsqueda (recibe
+// tipoCircuito y usa MINIMOS_AEA internamente), así que no hace falta un
+// paso posterior que corrija el resultado sin re-verificarlo.
 
 // CORREGIDO: cuando la corriente supera la tabla de conductores (>200A,
 // mm2 === '>70'), antes se devolvía 0V de caída, lo que hacía que
@@ -416,14 +471,6 @@ function renderResumenTablero() {
   evaluarPoderDeCorte();
 }
 
-// NUEVO: muestra el selector de tipo de tomacorriente solo cuando
-// el tipo de circuito elegido es "Tomacorriente".
-function toggleGrupoTipoTomacorriente() {
-  const tipoCircuito = document.getElementById('tipoCircuito').value;
-  const grupo = document.getElementById('grupoTipoTomacorriente');
-  grupo.style.display = (tipoCircuito === 'Tomacorriente') ? 'block' : 'none';
-}
-
 // NUEVO: sugiere automáticamente la caída de tensión máxima admitida según
 // el tipo de circuito (AEA es más estricta con iluminación). El usuario
 // puede seguir cambiándola si tiene un criterio justificado distinto.
@@ -444,7 +491,6 @@ function agregarCircuito(event) {
   }
   
   const tipoCircuito = document.getElementById('tipoCircuito').value;
-  const tipoTomacorriente = document.getElementById('tipoTomacorriente').value || '10A';
   const ambiente = document.getElementById('ambiente').value.trim();
   const potenciaCircuito = Number(document.getElementById('potenciaCircuito').value);
   const longitud = Number(document.getElementById('longitud').value);
@@ -483,12 +529,14 @@ function agregarCircuito(event) {
 
   const corriente = calcularCorriente(potenciaDPMS, proyectoActual.tipoSistema, cosPhiCircuito);
   const circuitosPorCano = Number(document.getElementById('circuitosPorCano')?.value) || 1;
-  let conductor = encontrarConductorConAgrupamiento(corriente, circuitosPorCano);
 
-  // CORREGIDO: aplica la sección/térmica mínima exigida por AEA según
-  // el tipo de circuito (tomas, cocina, lavarropas, etc.), aunque la
-  // corriente calculada hubiera alcanzado con un cable más chico.
-  conductor = aplicarMinimoAEA(tipoCircuito, conductor, tipoTomacorriente);
+  // El mínimo AEA por tipo de circuito (tomas, cocina, lavarropas, etc.)
+  // se exige DESDE el cálculo del conductor, no después: así, si el
+  // mínimo normativo obliga a una térmica que el cable no soportaría ya
+  // agrupado con otros circuitos en el mismo caño, la función sube de
+  // sección hasta encontrar una combinación realmente segura (o marca el
+  // circuito como fuera de tabla) en vez de forzarla sin verificar.
+  const conductor = encontrarConductorConAgrupamiento(corriente, circuitosPorCano, MINIMOS_AEA[tipoCircuito]);
 
   // La caída de tensión se recalcula con el conductor definitivo
   // (puede haber cambiado de tamaño al aplicar el mínimo AEA).
@@ -501,7 +549,6 @@ function agregarCircuito(event) {
   const circuito = {
     id: Date.now(),
     tipoCircuito,
-    tipoTomacorriente: tipoCircuito === 'Tomacorriente' ? tipoTomacorriente : null,
     ambiente,
     potenciaCircuito,
     potenciaDPMS,
@@ -515,7 +562,13 @@ function agregarCircuito(event) {
     seccionPE,
     caidaV,
     caidaPorcentaje,
-    valido: validarCaida(caidaPorcentaje, caidaMaxima)
+    valido: validarCaida(caidaPorcentaje, caidaMaxima),
+    // NUEVO: indica si la coordinación cable-térmica de este circuito se
+    // verificó contra la tabla real de agrupamiento (secciones ≤6mm², que
+    // es la que cubre la Guía AEA 770 pág.40) o si, por tratarse de una
+    // sección mayor, se usó el criterio de 1 circuito por caño a falta de
+    // datos de agrupamiento para esa sección.
+    agrupamientoVerificado: conductor.agrupamientoVerificado !== false
   };
   
   proyectoActual.circuitos.push(circuito);
@@ -536,12 +589,6 @@ function agregarCircuito(event) {
     crearExplosionEnClick(rect.left + rect.width / 2, rect.top + rect.height / 2);
   }
   document.getElementById('circuitForm').reset();
-  // CORREGIDO: form.reset() no dispara el evento "change" del select
-  // tipoCircuito, así que el campo "Tipo de Tomacorriente" (que solo
-  // debe verse cuando el tipo elegido es "Tomacorriente") quedaba
-  // visible después de agregar el circuito, aunque el select ya haya
-  // vuelto a "-- Seleccionar --".
-  toggleGrupoTipoTomacorriente();
 }
 
 function eliminarCircuito(id) {
@@ -574,14 +621,18 @@ function renderTablaCircuitos() {
     const caidaTexto = fueraDeTabla
       ? '⚠️ Corriente fuera de tabla (>200A) — requiere cálculo especial'
       : `${circuito.caidaV}V (${circuito.caidaPorcentaje}%)`;
-    
+    // NUEVO: aviso cuando la sección (>6mm²) no tiene datos de agrupamiento
+    // en la guía y se usó el criterio de 1 circuito por caño como referencia.
+    const avisoAgrupamiento = (!fueraDeTabla && circuito.agrupamientoVerificado === false && (circuito.circuitosPorCano || 1) > 1)
+      ? ' <span title="Sección >6mm²: sin datos de agrupamiento en la guía AEA 770; verificado con criterio de 1 circuito por caño">⚠️</span>'
+      : '';
+
     tr.innerHTML = `
       <td>${escaparHTML(circuito.tipoCircuito)}</td>
-      <td>${circuito.tipoTomacorriente || '-'}</td>
       <td>${escaparHTML(circuito.ambiente)}</td>
       <td>${circuito.potenciaCircuito}${circuito.tipoCircuito === 'Iluminación' ? ` <span style="opacity:0.65;font-size:11px;">(DPMS ×2/3 = ${circuito.potenciaDPMS.toFixed(2)} kW)</span>` : ''}</td>
       <td>${circuito.corriente}</td>
-      <td><strong>${circuito.conductor} mm²</strong></td>
+      <td><strong>${circuito.conductor} mm²</strong>${avisoAgrupamiento}</td>
       <td>${circuito.disyuntor} A</td>
       <td>${circuito.circuitosPorCano || 1}</td>
       <td>${circuito.seccionPE !== null ? circuito.seccionPE + ' mm²' : '-'}</td>
@@ -778,14 +829,9 @@ function initApp() {
   document.getElementById('circuitForm').addEventListener('submit', agregarCircuito);
   document.getElementById('btnLimpiarForm').addEventListener('click', () => {
     document.getElementById('circuitForm').reset();
-    toggleGrupoTipoTomacorriente();
   });
 
-  // NUEVO: el selector de tipo de tomacorriente solo tiene sentido
-  // cuando el circuito elegido es "Tomacorriente"; se oculta para el resto.
-  document.getElementById('tipoCircuito').addEventListener('change', toggleGrupoTipoTomacorriente);
   document.getElementById('tipoCircuito').addEventListener('change', actualizarCaidaSugerida);
-  toggleGrupoTipoTomacorriente();
   document.getElementById('btnExport').addEventListener('click', exportarPDF);
   document.getElementById('btnLimpiarTodo').addEventListener('click', limpiarTodo);
   
@@ -963,11 +1009,24 @@ function cargarChecklist770() {
   });
 }
 
-// Busca en la tabla de conductores ya existente (CONDUCTORES_AEA) la
-// corriente admisible (Iz) que corresponde a la térmica (In) asignada
-// al circuito, para verificar la coordinación Ib ≤ In ≤ Iz de 770.15.3.
-function obtenerIzParaDisyuntor(disyuntor) {
-  const fila = CONDUCTORES_AEA.find(c => c.disyuntor === disyuntor);
+// CORREGIDO (bug de seguridad detectado en revisión): esta función
+// buscaba el Iz por DISYUNTOR en la tabla de 1 circuito por caño
+// (CONDUCTORES_AEA), donde cada fila tiene amperios === disyuntor por
+// construcción. Eso la volvía una tautología (Iz siempre resultaba igual
+// al propio In que se le pasaba), así que la verificación de coordinación
+// del checklist 770.15.1-3 daba "cumple" para CUALQUIER circuito, sin
+// importar si el cable estaba agrupado con otros circuitos en el mismo
+// caño (donde el Iz real es menor). Ahora se busca el Iz por SECCIÓN de
+// cable (mm²) y cantidad de circuitos agrupados, usando la misma tabla de
+// la pág.40 (CALIBRE_MAX_AGRUPAMIENTO_770) que se usó para dimensionar el
+// circuito, así el checklist verifica el mismo Iz que realmente aplica.
+function obtenerIzAgrupado(mm2, circuitosPorCano = 1) {
+  const tabla = CALIBRE_MAX_AGRUPAMIENTO_770[mm2];
+  if (tabla) return tabla[circuitosPorCano] ?? tabla[3];
+  // Secciones fuera de la tabla de agrupamiento (>6mm²): se usa el
+  // criterio de 1 circuito por caño de CONDUCTORES_AEA (única data
+  // disponible en la guía para esas secciones).
+  const fila = CONDUCTORES_AEA.find(c => c.mm2 === mm2);
   return fila ? fila.amperios : null;
 }
 
@@ -1014,13 +1073,17 @@ const CIRCUITOS_MINIMOS_770_7 = {
   'Superior': { total: 6, texto: '6 circuitos: 2 IUG + 3 TUG + 1 de libre elección, o bien 3 IUG + 2 TUG + 1 de libre elección' }
 };
 
-// Tabla 770.8.II - Coeficientes de simultaneidad según el grado de electrificación.
-const COEFICIENTE_SIMULTANEIDAD_770_8 = {
-  'Mínimo': 1,
-  'Medio': 0.8,
-  'Elevado': 0.7,
-  'Superior': 0.6
-};
+// QUITADO tras revisar el texto completo de la Guía AEA 770: este
+// "coeficiente de simultaneidad por grado de electrificación" (antes
+// etiquetado como 770.8.2) no aparece en ningún lado de la guía. El
+// único factor de simultaneidad que el documento confirma es el 2/3
+// fijo para IUG (FACTOR_SIMULTANEIDAD_IUG, ya verificado numéricamente
+// contra el ejemplo resuelto de la guía) y el factor 1 para TUG/TUE
+// (que ya se toma implícito al no aplicar ninguna reducción). No se usaba
+// en ningún cálculo de corriente/sección, solo se mostraba en pantalla,
+// pero mostrar un número no verificado como si fuera un dato normativo
+// es peor que no mostrar nada. Se elimina hasta poder confirmarlo contra
+// una fuente (AEA 90364-7-770 vigente completa, no esta guía simplificada).
 
 // ============================================================
 // NUEVO — Tabla 770.7.III: puntos mínimos de utilización por
@@ -1259,7 +1322,6 @@ function actualizarGradoElectrificacion() {
   const superficieLimite = calcularSuperficieLimite(cubierta, semicubierta);
   const grado = determinarGradoElectrificacion(superficieLimite);
   const minimos = CIRCUITOS_MINIMOS_770_7[grado];
-  const coefSimult = COEFICIENTE_SIMULTANEIDAD_770_8[grado];
 
   // Cuenta, sin modificar la lógica original, los circuitos de uso general
   // (Iluminación / Tomacorriente) que ya se cargaron en el panel de circuitos.
@@ -1272,7 +1334,6 @@ function actualizarGradoElectrificacion() {
     <div class="stats-grid">
       <div class="stat"><span class="label">Superficie límite de aplicación:</span><span class="value">${superficieLimite.toFixed(1)} m²</span></div>
       <div class="stat"><span class="label">Grado de electrificación:</span><span class="value">${grado}</span></div>
-      <div class="stat"><span class="label">Coef. simultaneidad (770.8.2):</span><span class="value">${coefSimult}</span></div>
     </div>
     <p style="margin:10px 0 4px 0;"><strong>Circuitos mínimos exigidos (770.7.5):</strong> ${minimos.texto}</p>
     <p class="${cumpleMinimo ? 'valido' : 'invalido'}" style="margin:4px 0;">
@@ -1402,15 +1463,15 @@ function actualizarResumenAuto77015() {
   let hayProblemas = false;
 
   proyectoActual.circuitos.forEach(c => {
-    const iz = obtenerIzParaDisyuntor(c.disyuntor);
     const fueraDeTabla = c.conductor === '>70';
+    const iz = fueraDeTabla ? null : obtenerIzAgrupado(c.conductor, c.circuitosPorCano || 1);
     const coordinaOk = !fueraDeTabla && iz !== null && c.corriente <= c.disyuntor && c.disyuntor <= iz;
     if (!coordinaOk) hayProblemas = true;
     items += `
       <div class="checklist-result-row ${coordinaOk ? 'valido' : 'invalido'}">
         ${escaparHTML(c.ambiente)} (${escaparHTML(c.tipoCircuito)}): Ib=${c.corriente}A ·
         In=${fueraDeTabla ? '-' : c.disyuntor + 'A'} ·
-        Iz=${iz !== null ? iz + 'A' : '-'}
+        Iz=${iz !== null ? iz + 'A' : '-'} (${c.circuitosPorCano || 1} circuito(s)/caño)
         ${coordinaOk ? ' ✓ Coordinación Ib≤In≤Iz cumplida' : ' ⚠️ Revisar coordinación cable/protección'}
       </div>`;
   });
