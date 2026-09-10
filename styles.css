@@ -89,8 +89,12 @@ html, body {
 }
 
 .logo svg {
-  width: 60px;
-  height: 60px;
+  /* Escala fluida: mínimo 40px (celulares chicos), máximo 60px (desktop),
+     y en el medio crece según el ancho de la ventana (5vw). Reemplaza
+     el tamaño fijo anterior para que se vea proporcionado en cualquier
+     dispositivo sin necesitar un breakpoint para cada ancho. */
+  width: clamp(40px, 5vw, 60px);
+  height: clamp(40px, 5vw, 60px);
   filter: drop-shadow(0 0 12px rgba(255, 234, 0, 0.6));
   transition: transform 0.3s ease;
 }
@@ -136,6 +140,10 @@ html, body {
     contenido interno fuerce el ancho de la columna más allá de la pantalla */
   gap: 20px;
   padding: 0 24px;
+  /* Deja lugar abajo para que el botón flotante de WhatsApp (fixed,
+     bottom-right) no tape el último botón de la página al llegar al
+     final del scroll (ej. "Limpiar Todo" a ancho completo en mobile). */
+  padding-bottom: 90px;
   /* Suma el margen seguro en pantallas con bordes curvos o notch lateral
      (ej. celulares en horizontal) sin perder el padding base de 24px */
   padding-left: max(24px, env(safe-area-inset-left, 0px));
@@ -922,4 +930,60 @@ td {
   border: 1px solid var(--border-color);
   -webkit-overflow-scrolling: touch;
   margin-top: 10px;
+}
+
+/* ===== Botón flotante de WhatsApp ===== */
+.wsp-float-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 14px 22px;
+  background: #34D07F;
+  border: 3px solid #000;
+  border-radius: 999px;
+  box-shadow: 4px 4px 0 #000;
+
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #000;
+  text-decoration: none;
+  white-space: nowrap;
+
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wsp-float-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #000;
+}
+
+.wsp-float-btn:active {
+  transform: translate(0, 0);
+  box-shadow: 2px 2px 0 #000;
+}
+
+.wsp-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .wsp-float-btn {
+    bottom: 16px;
+    right: 16px;
+    padding: 14px;
+    font-size: 13px;
+    border-radius: 50%;
+  }
+  .wsp-text {
+    display: none;
+  }
 }
