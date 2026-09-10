@@ -99,7 +99,10 @@
       <input type="number" id="i2tTermicas" step="1" inputmode="decimal" placeholder="Ej: 300000 (dato de la curva del fabricante)">
       <small style="opacity:0.7">Tomar este dato de la curva "I²t" del fabricante de la térmica, evaluada A LA MISMA Icc informada arriba (no al poder de corte nominal). Sin este dato no se puede verificar k²S² ≥ I²t (AEA 770, pág. 45).</small>
     </div>
-    <button id="btnConfigurar" class="btn btn-primary btn-large">✓ Configurar Sistema</button>
+    <div class="form-actions">
+      <button id="btnConfigurar" class="btn btn-primary btn-large">✓ Configurar Sistema</button>
+      <button type="button" id="btnLimpiarConfig" class="btn btn-secondary btn-large">🗑 Limpiar Configuración</button>
+    </div>
     
     <!-- Tablero Principal Resumen -->
     <div id="panelTablero" class="summary-box" style="display: none; margin-top: 15px;">

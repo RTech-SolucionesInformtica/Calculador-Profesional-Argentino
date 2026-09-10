@@ -830,6 +830,51 @@ function limpiarTodo() {
   }
 }
 
+// NUEVO: botón propio de "Configuración del Sistema", independiente de
+// "Limpiar Todo". Resetea únicamente los datos de esa sección (tipo de
+// sistema, potencia, Icc, poder de corte, aislación, I²t) y oculta el
+// Tablero Principal — sin tocar los circuitos ya agregados ni el
+// checklist de la Sección 770, que viven en su propio storage.
+function limpiarConfiguracion() {
+  if (!confirm('¿Limpiar la Configuración del Sistema? Los circuitos ya agregados y el checklist no se van a borrar.')) {
+    return;
+  }
+
+  proyectoActual.tipoSistema = '';
+  proyectoActual.potenciaTotal = 0;
+  proyectoActual.factorPotencia = 0.95;
+  proyectoActual.longitudPrincipal = 20;
+  proyectoActual.iccOrigen = null;
+  proyectoActual.poderCorteTermicas = 6;
+  proyectoActual.tipoAislacion = 'PVC';
+  proyectoActual.i2tTermicas = null;
+  proyectoActual.estado770 = proyectoActual.estado770 || {};
+  proyectoActual.estado770.poderCorteOk = null;
+  proyectoActual.estado770.poderCorteFaltaDato = true;
+  proyectoActual.estado770.termicaOk = null;
+  proyectoActual.estado770.termicaFaltaDato = true;
+
+  guardarProyecto();
+
+  document.getElementById('tipoSistema').value = '';
+  document.getElementById('potenciaTotal').value = '';
+  document.getElementById('factorPotencia').value = '0.95';
+  document.getElementById('longitudPrincipal').value = '20';
+  document.getElementById('iccOrigen').value = '';
+  document.getElementById('poderCorteTermicas').value = '6';
+  document.getElementById('tipoAislacion').value = 'PVC';
+  document.getElementById('i2tTermicas').value = '';
+
+  document.getElementById('panelTablero').style.display = 'none';
+
+  // Recalcula los paneles que dependen de la configuración del sistema
+  // (sin recargar la página, así los circuitos y el checklist quedan tal
+  // cual estaban).
+  actualizarResumenAuto77015();
+  evaluarVerificacionTermica770();
+  calcularSemaforoGeneral();
+}
+
 function configurarSistema() {
   const tipoSistema = document.getElementById('tipoSistema').value;
   const potenciaTotal = Number(document.getElementById('potenciaTotal').value);
@@ -923,6 +968,7 @@ function initApp() {
   }
   
   document.getElementById('btnConfigurar').addEventListener('click', configurarSistema);
+  document.getElementById('btnLimpiarConfig').addEventListener('click', limpiarConfiguracion);
   document.getElementById('circuitForm').addEventListener('submit', agregarCircuito);
   document.getElementById('btnLimpiarForm').addEventListener('click', () => {
     document.getElementById('circuitForm').reset();
