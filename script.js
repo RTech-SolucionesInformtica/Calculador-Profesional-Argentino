@@ -661,7 +661,20 @@ function agregarCircuito(event) {
     const rect = boton.getBoundingClientRect();
     crearExplosionEnClick(rect.left + rect.width / 2, rect.top + rect.height / 2);
   }
-  document.getElementById('circuitForm').reset();
+
+  // CORREGIDO (UX): form.reset() vaciaba TAMBIÉN "Tipo de Circuito" y lo
+  // devolvía a "-- Seleccionar --". Al cargar varios circuitos seguidos
+  // del mismo tipo (ej. Iluminación de varios dormitorios), el usuario
+  // debía volver a elegir el tipo cada vez; si no lo notaba, el envío
+  // siguiente fallaba con "Completa todos los campos" y parecía que la
+  // app no dejaba cargar dos circuitos del mismo tipo. Ahora solo se
+  // limpian los campos que sí cambian de un circuito a otro (ambiente,
+  // potencia, longitud); el tipo de circuito y la caída máxima quedan
+  // como estaban, listos para el próximo circuito del mismo tipo.
+  document.getElementById('ambiente').value = '';
+  document.getElementById('potenciaCircuito').value = '';
+  document.getElementById('longitud').value = '';
+  document.getElementById('ambiente').focus();
 }
 
 function eliminarCircuito(id) {
