@@ -809,6 +809,9 @@ td {
   .logo svg line[stroke="#FFEA00"] {
     stroke: #B8860C !important;
   }
+  .logo svg text[fill="#FFEA00"] {
+    fill: #B8860C !important;
+  }
   .logo svg {
     filter: none;
   }

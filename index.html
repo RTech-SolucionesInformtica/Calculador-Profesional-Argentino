@@ -13,26 +13,54 @@
   <div class="header-inner">
     <!-- Logo Vectorial: Multímetro Eléctrico Profesional -->
     <div class="logo">
-      <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 100 103" xmlns="http://www.w3.org/2000/svg">
+        <!-- Protector de goma (bumper) asomando detrás de la carcasa -->
+        <rect x="20.5" y="11.5" width="59" height="77" rx="11" fill="#14202e"/>
         <!-- Estructura del Multímetro -->
         <rect x="25" y="15" width="50" height="70" rx="8" fill="#FFEA00" stroke="#050811" stroke-width="3"/>
+        <!-- Textura de agarre lateral del bumper -->
+        <line x1="22.2" y1="28" x2="22.2" y2="72" stroke="#0a1220" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.4 2.6"/>
+        <line x1="77.8" y1="28" x2="77.8" y2="72" stroke="#0a1220" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="2.4 2.6"/>
+        <!-- Tornillos de la carcasa -->
+        <circle cx="30" cy="19.5" r="1.3" fill="#050811"/>
+        <circle cx="70" cy="19.5" r="1.3" fill="#050811"/>
+        <circle cx="30" cy="80.5" r="1.3" fill="#050811"/>
+        <circle cx="70" cy="80.5" r="1.3" fill="#050811"/>
         <!-- Pantalla Digital LCD -->
-        <rect x="32" y="23" width="36" height="16" rx="2" fill="#1e293b" stroke="#050811" stroke-width="1.5"/>
-        <!-- Simulación de lectura 220V -->
-        <path d="M38 28h8v3h-8v2h8M50 28h8v3h-8v2h8M62 28v5h4v-5h-4" stroke="#FFEA00" stroke-width="1.5" fill="none"/>
-        <!-- Rueda Selectora de Medición -->
-        <circle cx="50" cy="56" r="12" fill="#050811"/>
-        <line x1="50" y1="56" x2="50" y2="47" stroke="#FFEA00" stroke-width="2.5" stroke-linecap="round"/>
+        <rect x="31" y="22.5" width="38" height="17" rx="1.8" fill="#16232f" stroke="#050811" stroke-width="1.5"/>
+        <!-- Indicador de modo (AC) y batería, arriba de la pantalla -->
+        <text x="34" y="27" font-family="Arial, Helvetica, sans-serif" font-size="4" font-weight="bold" fill="#FFEA00">AC</text>
+        <rect x="60.5" y="24.3" width="6" height="3" rx="0.6" fill="none" stroke="#FFEA00" stroke-width="0.7"/>
+        <rect x="66.5" y="25.1" width="1" height="1.4" fill="#FFEA00"/>
+        <!-- Lectura digital real: 220V -->
+        <text x="35.5" y="37" font-family="'Courier New', Consolas, monospace" font-size="10.5" font-weight="bold" fill="#FFEA00">220<tspan font-size="6" dx="0.5" dy="-3.2">V</tspan></text>
+        <!-- Rueda Selectora de Medición, con marcas de posición -->
+        <circle cx="50" cy="57" r="12.5" fill="#0a1220" stroke="#050811" stroke-width="1.2"/>
+        <circle cx="50" cy="57" r="12.5" fill="none" stroke="#FFEA00" stroke-width="0.6" stroke-dasharray="0.8 3.3"/>
+        <!-- Puntos de rango de colores (V~, V=, Ω, continuidad) -->
+        <circle cx="50" cy="46.2" r="1" fill="#FF1744"/>
+        <circle cx="59.4" cy="51.6" r="1" fill="#38bdf8"/>
+        <circle cx="59.4" cy="62.4" r="1" fill="#facc15"/>
+        <circle cx="40.6" cy="62.4" r="1" fill="#34d399"/>
+        <line x1="50" y1="57" x2="50" y2="47.5" stroke="#FFEA00" stroke-width="2.3" stroke-linecap="round"/>
+        <circle cx="50" cy="57" r="2.2" fill="#FFEA00"/>
+        <circle cx="49.3" cy="56.3" r="0.7" fill="#fff8d6" opacity="0.75"/>
         <!-- Puertos de las Sondas (Bornes COM, V, mA) -->
-        <circle cx="38" cy="74" r="3" fill="#1e293b"/>
-        <circle cx="50" cy="74" r="3" fill="#1e293b"/>
-        <circle cx="62" cy="74" r="3" fill="#FF1744"/>
+        <circle cx="38" cy="75" r="3" fill="#16232f" stroke="#050811" stroke-width="0.8"/>
+        <circle cx="50" cy="75" r="3" fill="#16232f" stroke="#050811" stroke-width="0.8"/>
+        <circle cx="62" cy="75" r="3" fill="#FF1744" stroke="#050811" stroke-width="0.8"/>
+        <circle cx="38" cy="75" r="1.1" fill="#0a1220"/>
+        <circle cx="50" cy="75" r="1.1" fill="#0a1220"/>
+        <circle cx="62" cy="75" r="1.1" fill="#7a0011"/>
+        <!-- Conectores tipo banana antes del cable -->
+        <rect x="36.3" y="77.5" width="3.4" height="3.6" rx="0.9" fill="#334155" stroke="#050811" stroke-width="0.5"/>
+        <rect x="60.3" y="77.5" width="3.4" height="3.6" rx="0.9" fill="#7a0011" stroke="#050811" stroke-width="0.5"/>
         <!-- Cables de Prueba: Gris (COM) y Rojo (V), cortos y contenidos dentro del ícono -->
-        <path d="M38 76 C 34 82, 28 84, 26 90" stroke="#94a3b8" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-        <path d="M62 76 C 66 82, 72 84, 74 90" stroke="#FF1744" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <path d="M38 81 C 34 86, 28 88, 26 94" stroke="#94a3b8" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+        <path d="M62 81 C 66 86, 72 88, 74 94" stroke="#FF1744" stroke-width="2.4" fill="none" stroke-linecap="round"/>
         <!-- Puntas de Sonda -->
-        <path d="M26 90 L23 98 L26 95.5 L29 98 Z" fill="#94a3b8"/>
-        <path d="M74 90 L71 98 L74 95.5 L77 98 Z" fill="#FF1744"/>
+        <path d="M26 94 L23 101.5 L26 99 L29 101.5 Z" fill="#cbd5e1"/>
+        <path d="M74 94 L71 101.5 L74 99 L77 101.5 Z" fill="#FF1744"/>
       </svg>
     </div>
     
@@ -219,6 +247,7 @@
       Informe generado automáticamente por el Calculador de Cableado Residencial AEA — Esc. José Martí.
       Los valores mostrados son orientativos y deben ser verificados por un instalador electricista matriculado
       antes de su ejecución, conforme a la reglamentación AEA 90364 vigente.
+      <div id="printFooterCredito">© 2026 R-TECH | Calculador AEA | Desarrollador Web: Juan Pablo Rodríguez</div>
     </div>
   </section>
 
